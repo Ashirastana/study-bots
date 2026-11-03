@@ -147,7 +147,11 @@ DEADLINE_RE = re.compile(r"(?:deadline|apply by|closing date|дедлайн|ср
 
 def _deadline(text: str) -> str:
     m = DEADLINE_RE.search(text)
-    return m.group(1).strip() if m else ""
+    if not m:
+        return ""
+    d = m.group(1).strip()
+    y = re.search(r"20\d\d", d)  # обрезаем всё после года
+    return d[:y.end()] if y else d
 
 
 def _title_key(title: str) -> str:
@@ -336,12 +340,71 @@ async def _page_text(link: str) -> str:
     return _strip(PAGE_RE_DROP.sub(" ", raw))[:12000]
 
 
+STOP = set("какие какой какая что как где когда нужно нужны нужен есть для про это мне можно или и в на по с о из the a an of for to in on and or is are what which how".split())
+
+
+def _db_search(question: str, limit=8) -> str:
+    """Ищет в базе уже найденных ботом возможностей (лучшие совпадения по словам вопроса)."""
+    words = [w for w in re.findall(r"[a-zа-яёәіңғүұқөһ0-9]{3,}", question.lower()) if w not in STOP][:8]
+    if not words:
+        return ""
+    with closing(_db()) as c:
+        rows = c.execute("SELECT title, link, text FROM items ORDER BY id DESC LIMIT 2000").fetchall()
+    scored = []
+    for t, l, x in rows:
+        blob = f"{t} {x}".lower()
+        sc = sum(blob.count(w[:6]) for w in words)
+        if sc:
+            scored.append((sc, t, l, x))
+    scored.sort(key=lambda r: -r[0])
+    return "\n".join(f"• {t} — {l} (дедлайн: {_deadline(x) or 'см. страницу'})" for _, t, l, x in scored[:limit])
+
+
+async def _web_search(query: str, n=6):
+    """Бесплатный поиск в интернете (DuckDuckGo HTML) → [(заголовок, ссылка, сниппет)]."""
+    from urllib.parse import quote, unquote
+    async with aiohttp.ClientSession() as s:
+        raw = await _fetch(s, f"https://html.duckduckgo.com/html/?q={quote(query)}")
+    out = []
+    if raw:
+        for href, title, snip in re.findall(
+                r'class="result__a"[^>]*href="([^"]+)"[^>]*>(.*?)</a>.*?class="result__snippet"[^>]*>(.*?)</', raw, re.S):
+            m = re.search(r"uddg=([^&]+)", href)
+            url = unquote(m.group(1)) if m else href
+            if url.startswith("http") and "duckduckgo.com" not in url:
+                out.append((_strip(title), url, _strip(snip)))
+            if len(out) >= n:
+                break
+    if not out:  # запасной вариант — Google News
+        async with aiohttp.ClientSession() as s:
+            raw = await _fetch(s, _gn(query).replace("%20when%3A2d", ""))
+        if raw:
+            for e in feedparser.parse(raw).entries[:n]:
+                out.append((_strip(e.get("title", "")), e.get("link", ""), _strip(e.get("summary", ""))[:200]))
+    return out
+
+
 async def _ask_ai(question: str, title="", link="", text="") -> str:
     if not (groq_chat and GROQ_KEY):
         return "ИИ не подключён: на хостинге нет переменной GROQ_API_KEY."
-    page = await _page_text(link)
-    ctx = f"Программа: {title}\nСсылка: {link}\nКраткое описание: {text[:1500]}\n\nТекст страницы:\n{page}" \
-        if (title or link) else "Конкретная программа не указана — ответь по общим знаниям."
+    if title or link:
+        page = await _page_text(link)
+        ctx = f"Программа: {title}\nСсылка: {link}\nКраткое описание: {text[:1500]}\n\nТекст страницы:\n{page}"
+        if not page:  # страница не открылась — ищем официальный сайт программы
+            found = await _web_search(f"{title or link} official requirements documents how to apply")
+            ctx += "\n\nРезультаты поиска:\n" + "\n".join(f"• {t} — {u}: {sn}" for t, u, sn in found)
+            if found:
+                ctx += "\n\nТекст первой найденной страницы:\n" + (await _page_text(found[0][1]))[:8000]
+    else:
+        found = await _web_search(question)
+        page = (await _page_text(found[0][1]))[:8000] if found else ""
+        mine = _db_search(question)
+        ctx = ("Свежий поиск в интернете по вопросу:\n" +
+               ("\n".join(f"• {t} — {u}: {sn}" for t, u, sn in found) or "ничего не нашлось") +
+               (f"\n\nТекст первой страницы ({found[0][1]}):\n{page}" if page else "") +
+               (f"\n\nВозможности, которые бот уже нашёл ранее:\n{mine}" if mine else "") +
+               "\n\nОпирайся на эти данные, указывай ссылки-источники; если данных мало — дополни общими "
+               "знаниями с пометкой «обычно».")
     answer = await groq_chat([
         {"role": "system", "content": ADVISOR},
         {"role": "user", "content": f"{ctx}\n\nВопрос:\n{question}"},
@@ -373,10 +436,13 @@ async def cmd_start(m: Message):
     await m.answer("Подписка включена ✅\nБуду присылать полностью оплачиваемые конференции, гранты, "
                    "стипендии и бизнес-программы со всего мира (30+ сайтов, Telegram-каналы, Google News): "
                    f"лидерство, экономика, право, права человека, туризм, дипломатия и другое. Проверяю каждые {CHECK_EVERY_MIN} мин.\n\n"
-                   "/now — проверить сейчас\n/sources — источники\n/stop — отписаться\n\n"
+                   "/now — проверить сейчас\n/list — последние находки (/list право — с фильтром)\n"
+                   "/sources — источники\n/stop — отписаться\n\n"
                    "📄 Под каждым уведомлением есть кнопка «Документы и требования».\n"
                    "❓ Ответьте (reply) на уведомление любым вопросом, пришлите ссылку на программу "
-                   "или просто спросите, например: «какие документы нужны для Chevening?»")
+                   "или просто спросите что угодно — бот поищет в интернете, прочитает официальную страницу "
+                   "и ответит со ссылками. Например: «какие документы нужны для Chevening?», "
+                   "«какие сейчас открыты конференции по правам человека?»")
 
 
 @dp.message(Command("stop"))
@@ -390,6 +456,23 @@ async def cmd_stop(m: Message):
 async def cmd_sources(m: Message):
     lines = [f"• {n}" for n in RSS_FEEDS] + [f"• {n}" for n in NEWS_FEEDS] + [f"• @{c}" for c in TG_CHANNELS]
     await m.answer("Источники:\n" + "\n".join(lines))
+
+
+@dp.message(Command("list"))
+async def cmd_list(m: Message):
+    """Последние найденные возможности (можно с фильтром: /list право)."""
+    q = (m.text or "").split(maxsplit=1)[1:] or [""]
+    with closing(_db()) as c:
+        rows = c.execute("SELECT title, link, text FROM items ORDER BY id DESC LIMIT 400").fetchall()
+    key = q[0].lower()
+    rows = [r for r in rows if not key or key in f"{r[0]} {r[2]}".lower()][:20]
+    if not rows:
+        await m.answer("Пока ничего не нашлось. Попробуйте позже или /now.")
+        return
+    lines = [f"• <a href=\"{html.escape(l)}\">{html.escape(t[:90])}</a>"
+             + (f" — ⏰ {html.escape(_deadline(x))}" if _deadline(x) else "") for t, l, x in rows]
+    await m.answer("Последние возможности" + (f" по «{html.escape(key)}»" if key else "") + ":\n\n"
+                   + "\n".join(lines), disable_web_page_preview=True)
 
 
 @dp.message(Command("now"))
