@@ -120,12 +120,14 @@ async def main():
     # BOTS=bot_ii — запустить на этом сервере только этих ботов (через запятую); пусто = всех.
     # Так одни и те же файлы можно держать на двух хостингах, а боты не мешают друг другу.
     only = {b.strip() for b in os.getenv("BOTS", "").split(",") if b.strip()}
-    for i, (name, prefix, script) in enumerate(read_bots()):
+    first = True  # поле «Telegram bot token» хостинга = первый бот, который запускается на этом сервере
+    for name, prefix, script in read_bots():
         if only and name not in only:
             log.info("%s: пропущен (не в BOTS)", name)
             continue
         try:
-            mod = load_bot(name, prefix, root, first=(i == 0), script=script)
+            mod = load_bot(name, prefix, root, first=first, script=script)
+            first = False
         except Exception:
             log.exception("%s: не удалось загрузить", name)
             continue
