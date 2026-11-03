@@ -741,7 +741,7 @@ async def on_voice(m: Message):
         path = os.path.join(tmp, "v.ogg")
         await bot.download(media, destination=path)
         try:
-            r = await ai.transcribe_smart(path, context)
+            r = await ai.transcribe_smart(path, "")  # без подсказок: слышим как есть
         except Exception as e:
             log.exception("transcribe")
             return await ai_failed(m, e)
@@ -756,14 +756,11 @@ async def on_voice(m: Message):
                             no_score=True, extra_kb=wrong_kb)
     heard = r["text"]
     q = LAST_ES.get(s["id"], "")
-    restored = await ai.restore_voice(heard, q, ", ".join(known_words(s["id"])[-30:]))
-    if restored != heard:
-        log.info("voice restored %r -> %r", heard, restored)
-    r["text"] = restored
+    # Не «исправляем» расшифровку: иначе ошибки произношения исчезают
     unsure = r.get("unsure")
     note = " <i>(могла расслышать неточно)</i>" if unsure else ""
     await dialog(m, s, "[ГОЛОС] " + r["text"],
-                 prefix=f"📝 <b>Я услышала:</b> <i>{ai.esc(r['text'])}</i>{note}\n\n",
+                 prefix=f"📝 <b>Я услышала (как есть):</b> <i>{ai.esc(r['text'])}</i>{note}\n\n",
                  no_score=bool(unsure), extra_kb=wrong_kb)
 
 
