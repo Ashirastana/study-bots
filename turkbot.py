@@ -150,6 +150,7 @@ BTN_TODAY, BTN_WORDS = "📅 Задание на сегодня", "📚 Слов
 BTN_LISTEN, BTN_QUIZ = "🔊 Послушать слова", "🧠 Проверить слова"
 BTN_TALK, BTN_PROGRESS = "🗣 Поговорить с учителем", "📈 Мои успехи"
 BTN_HELP = "❓ Как пользоваться"
+BTN_MISTAKES = "🔁 Мои ошибки"
 BTN_LESSON, BTN_GAMES, BTN_VIDEO = "📖 Урок дня", "🎮 Игры", "🎬 Видео и подкасты"
 
 
@@ -162,7 +163,8 @@ def menu_kb():
         [K(text=BTN_WORDS), K(text=BTN_LISTEN)],
         [K(text=BTN_QUIZ), K(text=BTN_GAMES)],
         [K(text=BTN_TALK), K(text=BTN_VIDEO)],
-        [K(text=BTN_PROGRESS), K(text=BTN_HELP)],
+        [K(text=BTN_PROGRESS), K(text=BTN_MISTAKES)],
+        [K(text=BTN_HELP)],
     ], resize_keyboard=True, is_persistent=True, input_field_placeholder="Пишите по-турецки или запишите голос 🎤")
 
 
@@ -553,6 +555,17 @@ async def start_quiz(uid: int, chat_answer):
                else "Нажмите «📚 Слова дня», чтобы получить новые слова.")
         return await chat_answer("🎉 На сегодня все слова повторены! " + nxt)
     QUIZ[uid] = {"queue": due, "right": 0, "total": 0}
+    await quiz_next(uid)
+
+
+async def start_mistakes(uid: int, chat_answer):
+    bad = vocab.trouble(uid)
+    if not bad:
+        return await chat_answer("👍 У Вас пока нет слов с ошибками — отлично! "
+                                 "Разбор появится, когда в проверке слов будут промахи.")
+    QUIZ[uid] = {"queue": bad, "right": 0, "total": 0}
+    await send(uid, f"🔁 <b>Мои ошибки</b> — разберём {len(bad)} слов, где были промахи. "
+                    "Так они и запоминаются 💪")
     await quiz_next(uid)
 
 
@@ -1193,6 +1206,10 @@ async def b_quiz(m, s):
     await start_quiz(s["id"], m.answer)
 
 
+async def b_mistakes(m, s):
+    await start_mistakes(s["id"], m.answer)
+
+
 async def b_talk(m, s):
     await m.answer("🗣 Отвечайте учителю текстом или голосом — <b>нажмите и держите 🎤</b> справа внизу.")
     await dialog(m, s, "(Ученик нажал «Поговорить с учителем». Поздоровайся и дай ОДНО простое задание по уроку "
@@ -1223,7 +1240,7 @@ async def b_video(m, s):
 
 
 BUTTONS = {BTN_TODAY: b_today, BTN_WORDS: b_words, BTN_LISTEN: b_listen, BTN_QUIZ: b_quiz,
-           BTN_TALK: b_talk, BTN_PROGRESS: b_progress, BTN_HELP: b_help,
+           BTN_TALK: b_talk, BTN_PROGRESS: b_progress, BTN_HELP: b_help, BTN_MISTAKES: b_mistakes,
            BTN_LESSON: b_lesson, BTN_GAMES: b_games, BTN_VIDEO: b_video}
 
 

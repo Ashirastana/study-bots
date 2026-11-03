@@ -56,6 +56,13 @@ class Vocab:
                        (box, nxt.isoformat(), uid, idx))
         self.c.commit()
 
+    def trouble(self, uid, limit=12):
+        """Слова, где ученик чаще всего ошибался (для разбора «Мои ошибки»)."""
+        rows = self.c.execute(
+            "SELECT idx FROM word_progress WHERE student_id=? AND wrong_n>0 "
+            "ORDER BY wrong_n DESC, box LIMIT ?", (uid, limit)).fetchall()
+        return [r[0] for r in rows]
+
     def question(self, idx):
         """Турецкое слово + 4 варианта перевода (1 верный)."""
         es, ru, kk = WORDS[idx]
