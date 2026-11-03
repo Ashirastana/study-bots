@@ -120,3 +120,36 @@ def resources_text() -> str:
                  "пересказывайте учителю. Начните с того, что уже видели на русском.\n"
                  "🎵 <b>Песни</b>: найдите текст (şarkı sözleri), переведите с учителем, пойте вслух.")
     return "\n".join(lines)
+
+
+# Видео по интересам: ученик сам выбирает тему, которая ему нравится — так
+# смотреть интереснее. Ссылки — тематический поиск YouTube (всегда рабочий);
+# при желании любую можно заменить на конкретный канал/плейлист. Совет ученику —
+# включать турецкие субтитры и смотреть по 10–15 минут.
+# Формат: (ключ, кнопка, описание, ссылка).
+VIDEO_THEMES = [
+    ("beginner", "🟢 Для начинающих", "простая, медленная речь с картинками — если тяжело, начните отсюда",
+        yt("easy turkish for beginners subtitles")),
+    ("street", "🗣 Уличные диалоги", "Easy Turkish — живая речь на улице с субтитрами",
+        yt("easy turkish street interview subtitles")),
+    ("series", "📺 Сериалы (dizi)", "турецкие сериалы с субтитрами для изучающих",
+        yt("learn turkish with tv series dizi english subtitles")),
+    ("business", "💼 Бизнес и саморазвитие", "про бизнес, деньги и развитие — с субтитрами",
+        yt("turkish business self improvement motivation video subtitles")),
+    ("vlog", "🎒 Влоги и жизнь", "жизнь в Турции, влоги с субтитрами",
+        yt("turkish vlog daily life subtitles")),
+    ("podcast", "🎧 Подкасты", "слушать в дороге: диалог и грамматика",
+        yt("turkish podcast for learners slow")),
+    ("songs", "🎵 Песни", "клипы с текстом (şarkı sözleri)",
+        yt("turkish songs with lyrics şarkı sözleri")),
+]
+
+
+def video_themes_text() -> str:
+    lines = ["🎬 <b>Видео по интересам</b>",
+             "Выберите тему, которая вам по душе — смотреть будет интереснее. "
+             "Совет: включите <b>турецкие субтитры</b> и смотрите по 10–15 минут, "
+             "потом перескажите учителю.\n"]
+    for _key, label, desc, _url in VIDEO_THEMES:
+        lines.append(f"{label} — {desc}")
+    return "\n".join(lines)
