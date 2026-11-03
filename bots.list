@@ -1,4 +1,4 @@
-# бот (файл <бот>.env)  префикс_секретов  [файл кода]
+# бот (файл <бот>.env)  префикс_секретов  [файл кода]  [separate — только где BOTS=<бот>]
 bot_ispanskiy  ES  studybot.py
-bot_ii         AI  aibot.py
+bot_ii         AI  aibot.py      separate   # работает на отдельном сервере (BOTS=bot_ii)
 bot_turkish    TR  turkbot.py

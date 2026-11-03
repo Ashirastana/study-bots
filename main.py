@@ -63,14 +63,19 @@ def read_env(path: str) -> dict:
     return env
 
 
+SEPARATE: set = set()  # боты с пометкой «separate» — только на сервере, где они явно указаны в BOTS
+
+
 def read_bots() -> list:
-    """Строки bots.list: <бот> <ПРЕФИКС> [файл кода, по умолчанию studybot.py]."""
+    """Строки bots.list: <бот> <ПРЕФИКС> [файл кода, по умолчанию studybot.py] [separate]."""
     bots = []
     with open(os.path.join(HERE, "bots.list"), encoding="utf-8") as f:
         for line in f:
             parts = line.split("#", 1)[0].split()
             if len(parts) >= 2:
                 bots.append((parts[0], parts[1], parts[2] if len(parts) > 2 else "studybot.py"))
+                if "separate" in parts[3:]:
+                    SEPARATE.add(parts[0])
     return bots
 
 
@@ -122,7 +127,7 @@ async def main():
     only = {b.strip() for b in os.getenv("BOTS", "").split(",") if b.strip()}
     first = True  # поле «Telegram bot token» хостинга = первый бот, который запускается на этом сервере
     for name, prefix, script in read_bots():
-        if only and name not in only:
+        if (only and name not in only) or (not only and name in SEPARATE):
             log.info("%s: пропущен (не в BOTS)", name)
             continue
         try:
