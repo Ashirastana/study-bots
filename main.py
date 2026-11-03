@@ -1,15 +1,23 @@
 """Запускает всех учебных ботов из bots.list в ОДНОМ процессе (экономит память на бесплатном
-тарифе: библиотеки aiogram/openai грузятся один раз, а не на каждого бота).
+тарифе: библиотека aiogram грузится один раз, а не на каждого бота).
 
 У каждого бота свои настройки (<бот>.env), свой токен (переменная <ПРЕФИКС>_BOT_TOKEN),
 своя папка данных и своя база SQLite (/data/<бот>/bot.db). Если бот падает,
 перезапускается только он, остальные продолжают работать.
 """
-import asyncio
-import importlib.util
-import logging
 import os
-import signal
+import sys
+
+# Экономия памяти: меньше «арен» у системного malloc (иначе потоки раздувают память).
+# Переменная должна быть задана до старта процесса, поэтому перезапускаемся один раз с ней.
+if os.environ.get("MALLOC_ARENA_MAX") is None:
+    os.environ["MALLOC_ARENA_MAX"] = "2"
+    os.execv(sys.executable, [sys.executable] + sys.argv)
+
+import asyncio  # noqa: E402
+import importlib.util  # noqa: E402
+import logging  # noqa: E402
+import signal  # noqa: E402
 
 from aiogram import Dispatcher
 

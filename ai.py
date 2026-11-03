@@ -19,10 +19,9 @@ async def groq_model(force_refresh=False) -> str:
     """Возвращает рабочую модель Groq. Если указанная недоступна — спрашивает у Groq список и выбирает."""
     if _groq_model_cache["model"] and not force_refresh:
         return _groq_model_cache["model"]
-    from openai import AsyncOpenAI
     try:
-        models = await AsyncOpenAI(api_key=GROQ_KEY, base_url=GROQ_URL).models.list()
-        have = {m.id for m in models.data}
+        data = await _groq_request("GET", "/models")
+        have = {m["id"] for m in data.get("data", [])}
     except Exception:
         have = set()
     for m in GROQ_PREFS:
@@ -40,16 +39,29 @@ def groq_extra(model: str) -> dict:
     return {"reasoning_effort": os.getenv("GROQ_REASONING", "medium")} if "gpt-oss" in model else {}
 
 
+async def _groq_request(method: str, path: str, json_body=None, form=None) -> dict:
+    """Лёгкий клиент Groq на aiohttp (уже есть в aiogram) — без тяжёлой библиотеки openai,
+    чтобы экономить память на бесплатном хостинге."""
+    import aiohttp
+    timeout = aiohttp.ClientTimeout(total=120)
+    headers = {"Authorization": f"Bearer {GROQ_KEY}"}
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        async with session.request(method, GROQ_URL + path, headers=headers,
+                                   json=json_body, data=form) as r:
+            text = await r.text()
+            if r.status >= 400:
+                raise RuntimeError(f"Groq {r.status}: {text[:500]}")
+            return json.loads(text) if text else {}
+
+
 async def groq_chat(messages: list, max_tokens: int, temperature: float) -> str:
-    from openai import AsyncOpenAI
-    client = AsyncOpenAI(api_key=GROQ_KEY, base_url=GROQ_URL)
     for attempt in range(2):
         model = await groq_model(force_refresh=attempt > 0)
         try:
-            r = await client.chat.completions.create(
-                model=model, max_tokens=max_tokens, temperature=temperature,
-                messages=messages, extra_body=groq_extra(model))
-            return r.choices[0].message.content or ""
+            body = {"model": model, "max_tokens": max_tokens, "temperature": temperature,
+                    "messages": messages, **groq_extra(model)}
+            r = await _groq_request("POST", "/chat/completions", json_body=body)
+            return (r["choices"][0]["message"].get("content") or "")
         except Exception as e:
             msg = str(e).lower()
             if attempt == 0 and ("model_not_found" in msg or "does not exist" in msg or "decommission" in msg):
@@ -169,18 +181,29 @@ def _get(o, k, default=None):
 
 
 async def _transcribe_once(path: str, language, prompt: str) -> dict:
-    from openai import AsyncOpenAI
     if GROQ_KEY:
-        client, model = AsyncOpenAI(api_key=GROQ_KEY, base_url=GROQ_URL), GROQ_STT
+        import aiohttp
+        form = aiohttp.FormData()
+        with open(path, "rb") as f:
+            form.add_field("file", f.read(), filename=os.path.basename(path))
+        form.add_field("model", GROQ_STT)
+        form.add_field("response_format", "verbose_json")
+        form.add_field("temperature", "0")
+        if language:
+            form.add_field("language", language)
+        if prompt:
+            form.add_field("prompt", prompt[:800])
+        r = await _groq_request("POST", "/audio/transcriptions", form=form)
     else:
-        client, model = AsyncOpenAI(api_key=OPENAI_KEY), TRANSCRIBE_MODEL
-    kw = dict(model=model, response_format="verbose_json", temperature=0)
-    if language:
-        kw["language"] = language
-    if prompt:
-        kw["prompt"] = prompt[:800]
-    with open(path, "rb") as f:
-        r = await client.audio.transcriptions.create(file=(os.path.basename(path), f), **kw)
+        from openai import AsyncOpenAI
+        kw = dict(model=TRANSCRIBE_MODEL, response_format="verbose_json", temperature=0)
+        if language:
+            kw["language"] = language
+        if prompt:
+            kw["prompt"] = prompt[:800]
+        with open(path, "rb") as f:
+            r = await AsyncOpenAI(api_key=OPENAI_KEY).audio.transcriptions.create(
+                file=(os.path.basename(path), f), **kw)
     segs = _get(r, "segments") or []
     lps = [_get(x, "avg_logprob", 0.0) for x in segs]
     nsp = [_get(x, "no_speech_prob", 0.0) for x in segs]
