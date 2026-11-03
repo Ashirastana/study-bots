@@ -9,7 +9,7 @@ if [ ! -f "$DATA/bot.db" ] && [ -f "/app/seed/$NAME.db" ]; then
   cp "/app/seed/$NAME.db" "$DATA/bot.db" && chmod 644 "$DATA/bot.db"
   echo "[$NAME] перенесена база с Mac"
 fi
-set -a; source "/app/bots/$NAME/settings.env"; set +a
+set -a; source "/app/$NAME.env"; set +a
 TOKEN_VAR="${PREFIX}_BOT_TOKEN"
 if [ -z "${!TOKEN_VAR:-}" ]; then
   echo "[$NAME] нет секрета $TOKEN_VAR — бот не запущен"; sleep 3600; exit 1
@@ -19,4 +19,4 @@ export BOT_TOKEN="${!TOKEN_VAR}"
 KEY_VAR="${PREFIX}_GROQ_API_KEY"; [ -n "${!KEY_VAR:-}" ] && export GROQ_API_KEY="${!KEY_VAR}"
 export DB_PATH="$DATA/bot.db"
 cd "$DATA"   # временные файлы бота — в его папке
-exec python /app/app/bot.py
+exec python /app/bot.py

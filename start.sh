@@ -1,5 +1,5 @@
 #!/bin/bash
-# Собирает конфиг supervisord из bots/bots.list: каждый бот — отдельный процесс,
+# Собирает конфиг supervisord из bots.list: каждый бот — отдельный процесс,
 # упал один — перезапускается только он.
 set -euo pipefail
 CONF=/tmp/supervisord.conf
@@ -11,7 +11,7 @@ logfile=/dev/null
 logfile_maxbytes=0
 pidfile=/tmp/supervisord.pid
 HDR
-grep -vE '^\s*(#|$)' /app/bots/bots.list | while read -r NAME PREFIX; do
+grep -vE '^\s*(#|$)' /app/bots.list | while read -r NAME PREFIX; do
 cat >> $CONF <<PRG
 
 [program:$NAME]
@@ -25,5 +25,5 @@ stdout_logfile_maxbytes=0
 redirect_stderr=true
 PRG
 done
-echo "Запускаю ботов: $(grep -vE '^\s*(#|$)' /app/bots/bots.list | awk '{print $1}' | xargs)"
+echo "Запускаю ботов: $(grep -vE '^\s*(#|$)' /app/bots.list | awk '{print $1}' | xargs)"
 exec supervisord -c $CONF
