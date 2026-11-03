@@ -65,9 +65,11 @@ def read_bots() -> list:
     return bots
 
 
-def load_bot(name: str, prefix: str, root: str):
+def load_bot(name: str, prefix: str, root: str, first: bool = False):
     """Загружает studybot.py как отдельный модуль со своими настройками. None — если нет токена."""
     token = os.getenv(f"{prefix}_BOT_TOKEN", "").strip()
+    if not token and first:  # поле «Telegram bot token» на хостинге = первый бот из списка
+        token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
     if not token:
         log.warning("%s: нет переменной %s_BOT_TOKEN — бот не запущен", name, prefix)
         return None
@@ -106,9 +108,9 @@ async def run_forever(name: str, mod):
 async def main():
     root = data_root()
     loaded = []
-    for name, prefix in read_bots():
+    for i, (name, prefix) in enumerate(read_bots()):
         try:
-            mod = load_bot(name, prefix, root)
+            mod = load_bot(name, prefix, root, first=(i == 0))
         except Exception:
             log.exception("%s: не удалось загрузить", name)
             continue
