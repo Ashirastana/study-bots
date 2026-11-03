@@ -158,6 +158,7 @@ def report_kb(uid: int | None = None) -> InlineKeyboardMarkup:
         w = plan.week_of(db.day_index(uid, today())) if uid and db.get_student(uid) else 1
         return InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="▶️ Смотреть видео на YouTube", url=plan.es_video_url(w))],
+            [InlineKeyboardButton(text="🎬 Видео по интересам", callback_data="vtopics")],
             [InlineKeyboardButton(text="✅ Сегодня всё сделала", callback_data="mark")],
             [InlineKeyboardButton(text="🎬 Посмотрела видео (20 минут)", callback_data="hours:0.34")],
         ])
@@ -609,6 +610,18 @@ async def cb_hours(c: CallbackQuery):
             db.add_xp(c.from_user.id, points.XP_VIDEO)
         return await c.answer(f"🎬 Записала! Сегодня видео: {round(r['hours'] * 60)} мин 👏", show_alert=True)
     await c.answer(f"+{h:g} ч. Сегодня: {r['hours']:g} ч")
+
+
+@dp.callback_query(F.data == "vtopics")
+async def cb_vtopics(c: CallbackQuery):
+    if not student_or_none(c.from_user.id):
+        return await c.answer("Сначала /start", show_alert=True)
+    await c.answer()
+    kb = InlineKeyboardMarkup(inline_keyboard=(
+        [[InlineKeyboardButton(text=label, url=url)] for _k, label, _d, url in plan.VIDEO_THEMES]
+        + [[InlineKeyboardButton(text="🎬 Посмотрела видео (20 минут)", callback_data="hours:0.34")]]
+    ))
+    await send(c.from_user.id, plan.video_themes_text(), reply_markup=kb)
 
 
 async def dialog(m: Message, s, user_text: str, prefix: str = "", no_score: bool = False, extra_kb=None):

@@ -1,4 +1,10 @@
 """Учебный план из двух PDF: испанский (8 недель) и ИИ (12 недель)."""
+from urllib.parse import quote_plus
+
+
+def yt(q: str) -> str:
+    return "https://www.youtube.com/results?search_query=" + quote_plus(q)
+
 
 YT_SUPER = '<a href="https://www.youtube.com/@DreamingSpanish/search?query=superbeginner">видео для самых начинающих (YouTube)</a>'
 YT_BEGIN = '<a href="https://www.youtube.com/@DreamingSpanish/search?query=beginner">видео для начинающих (YouTube)</a>'
@@ -128,4 +134,37 @@ def full_plan_text(track: str) -> str:
         lines, items = ["<b>🤖 ИИ на практике — 14 недель</b>"], AI_WEEKS.items()
     for w, (t, c) in items:
         lines.append(f"<b>{w}.</b> {t}\n   ✔️ {c}")
+    return "\n".join(lines)
+
+
+# Видео по интересам: ученик сам выбирает тему, которая ему нравится — так
+# смотреть интереснее. Ссылки — тематический поиск YouTube (всегда рабочий);
+# любую можно заменить на конкретный канал/плейлист. Совет ученику — включать
+# субтитры (сначала на русском/английском, позже на испанском).
+# Формат: (ключ, кнопка, описание, ссылка).
+VIDEO_THEMES = [
+    ("beginner", "🟢 Для начинающих", "Dreaming Spanish — медленно, всё понятно по картинкам",
+        "https://www.youtube.com/@DreamingSpanish/search?query=superbeginner"),
+    ("street", "🗣 Уличные диалоги", "Easy Spanish — живая речь на улице с субтитрами",
+        yt("easy spanish street interview subtitles")),
+    ("series", "📺 Сериалы", "испанские сериалы с субтитрами для изучающих",
+        yt("learn spanish with tv series english subtitles")),
+    ("business", "💼 Бизнес и саморазвитие", "про бизнес, деньги и развитие — с субтитрами",
+        yt("spanish business self improvement motivation video subtitles")),
+    ("vlog", "🎒 Влоги и жизнь", "жизнь в Испании и Латам, влоги с субтитрами",
+        yt("spanish vlog daily life subtitles")),
+    ("podcast", "🎧 Подкасты", "слушать в дороге: для изучающих, помедленнее",
+        yt("spanish podcast for beginners slow")),
+    ("songs", "🎵 Песни", "клипы с текстом (letra)",
+        yt("spanish songs with lyrics letra")),
+]
+
+
+def video_themes_text() -> str:
+    lines = ["🎬 <b>Видео по интересам</b>",
+             "Выберите тему, которая вам по душе — смотреть будет интереснее. "
+             "Совет: включите <b>субтитры</b> и смотрите по 15–20 минут, "
+             "потом расскажите учителю, что поняли.\n"]
+    for _key, label, desc, _url in VIDEO_THEMES:
+        lines.append(f"{label} — {desc}")
     return "\n".join(lines)
