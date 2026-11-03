@@ -27,6 +27,7 @@ import tr_ai as ai  # noqa: E402
 import tr_plan as plan  # noqa: E402
 import tr_lessons as lessons  # noqa: E402
 import tr_games as games  # noqa: E402
+import points  # noqa: E402
 from db import DB  # noqa: E402
 from tr_vocab import Vocab, word_card as _word_card, distractors  # noqa: E402
 from tr_vocab_data import WORDS  # noqa: E402
@@ -445,10 +446,13 @@ async def quiz_next(uid: int):
             QUIZ.pop(uid, None)
             if t:
                 db.mark(uid, today(), DONE)
+                gained = r * points.XP_PER_CORRECT + (points.XP_QUIZ_PERFECT if r == t else 0)
+                total_xp = db.add_xp(uid, gained)
                 verdict = ("Превосходно! 🔥" if r == t else
                            "Хорошо 👍 Слова с ошибками я повторю с Вами завтра." if r / t >= 0.7 else
                            "Ничего страшного! Слова с ошибками я повторю завтра — так они и запоминаются 💪")
-                await send(uid, f"✅ Готово! Правильно: <b>{r} из {t}</b>. {verdict}")
+                await send(uid, f"✅ Готово! Правильно: <b>{r} из {t}</b>. {verdict}\n"
+                                f"⭐ +{gained} очков · всего {total_xp}")
         return
     idx = st["queue"][0]
     es, opts = vocab.question(idx)
@@ -618,9 +622,12 @@ async def game_next(uid: int):
         r, t = st["right"], st["total"]
         GAME.pop(uid, None)
         db.mark(uid, today(), DONE)
+        gained = r * points.XP_PER_CORRECT
+        total_xp = db.add_xp(uid, gained)
         verdict = ("Превосходно! 🔥" if r == t else "Хорошо 👍 Ошибки — повод сыграть ещё раз." if r / max(t, 1) >= 0.7
                    else "Ничего страшного — так слова и запоминаются 💪 Сыграйте ещё раз!")
-        return await send(uid, f"🏁 Игра окончена: <b>{r} из {t}</b>. {verdict}", reply_markup=games_kb())
+        return await send(uid, f"🏁 Игра окончена: <b>{r} из {t}</b>. {verdict}\n"
+                               f"⭐ +{gained} очков · всего {total_xp}", reply_markup=games_kb())
     kind, pool, n = st["type"], game_pool(uid), st["total"]
     used = st.setdefault("used", set())
     pool = [i for i in pool if i not in used] or pool  # без повторов в одной игре
@@ -842,6 +849,8 @@ async def cb_mark(c: CallbackQuery):
     if not student_or_none(c.from_user.id):
         return await c.answer("Сначала /start", show_alert=True)
     db.mark(c.from_user.id, today(), DONE)
+    if sent_once(f"xp_done:{c.from_user.id}", today()):
+        db.add_xp(c.from_user.id, points.XP_DAILY_DONE)
     await c.answer(V("Записал ✅ Вы молодец!", "Записал ✅ Молодец!"), show_alert=ES)
 
 
@@ -854,6 +863,8 @@ async def cb_hours(c: CallbackQuery):
     r = db.report(c.from_user.id, today())
     if ES:
         db.mark(c.from_user.id, today(), DONE)
+        if sent_once(f"xp_video:{c.from_user.id}", today()):
+            db.add_xp(c.from_user.id, points.XP_VIDEO)
         return await c.answer(f"🎬 Записал! Сегодня видео: {round(r['hours'] * 60)} мин 👏", show_alert=True)
     await c.answer(f"+{h:g} ч. Сегодня: {r['hours']:g} ч")
 
@@ -1132,6 +1143,7 @@ def summary_text(s, for_admin=True, days=7) -> str:
         mins = round(st["hours"] * 60)
         return (f"📈 <b>Ваши успехи — неделя {w}</b>\n\n"
                 f"🔥 Занимаетесь {streak(s['id'])} дн. подряд\n"
+                f"{points.line(db.get_xp(s['id']))}\n"
                 f"📅 За эту неделю: {st['active_days']} из 7 дней\n"
                 f"📚 Слов изучено: {vs['seen']}, из них уже хорошо помните: {vs['learned']}\n"
                 f"🎯 Правильных ответов в проверке слов: {acc}\n"
