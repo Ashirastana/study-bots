@@ -117,7 +117,13 @@ async def run_forever(name: str, mod):
 async def main():
     root = data_root()
     loaded = []
+    # BOTS=bot_ii — запустить на этом сервере только этих ботов (через запятую); пусто = всех.
+    # Так одни и те же файлы можно держать на двух хостингах, а боты не мешают друг другу.
+    only = {b.strip() for b in os.getenv("BOTS", "").split(",") if b.strip()}
     for i, (name, prefix, script) in enumerate(read_bots()):
+        if only and name not in only:
+            log.info("%s: пропущен (не в BOTS)", name)
+            continue
         try:
             mod = load_bot(name, prefix, root, first=(i == 0), script=script)
         except Exception:
