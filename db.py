@@ -30,12 +30,26 @@ class DB:
         cols = [r[1] for r in self.c.execute("PRAGMA table_info(students)")]
         if "profile" not in cols:
             self.c.execute("ALTER TABLE students ADD COLUMN profile TEXT DEFAULT ''")
+        if "xp" not in cols:
+            self.c.execute("ALTER TABLE students ADD COLUMN xp INTEGER DEFAULT 0")
         self.c.commit()
 
     # --- профиль и история диалога ---
     def set_profile(self, uid, text):
         self.c.execute("UPDATE students SET profile=? WHERE id=?", (text, uid))
         self.c.commit()
+
+    # --- очки (геймификация) ---
+    def add_xp(self, uid, n: int) -> int:
+        """Начисляет n очков и возвращает новый итог."""
+        self.c.execute("UPDATE students SET xp = COALESCE(xp, 0) + ? WHERE id=?", (n, uid))
+        self.c.commit()
+        r = self.c.execute("SELECT xp FROM students WHERE id=?", (uid,)).fetchone()
+        return (r["xp"] or 0) if r else 0
+
+    def get_xp(self, uid) -> int:
+        r = self.c.execute("SELECT xp FROM students WHERE id=?", (uid,)).fetchone()
+        return (r["xp"] or 0) if r else 0
 
     def add_msg(self, uid, role, content):
         self.c.execute("INSERT INTO messages(student_id,role,content) VALUES(?,?,?)", (uid, role, content))
