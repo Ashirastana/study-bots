@@ -355,9 +355,93 @@ if ES:
         await send(uid, "Спасибо! 🙏 Я всё запомнила и подстрою занятия под Вас."
                         + ("\n\nРаз у Вас 15–20 минут — делайте каждый день хотя бы шаги 1 и 3, "
                            "видео — когда будет время." if light else ""))
+        if st.get("lvl") != "Совсем не знаю":
+            return await start_placement(uid)
         await send(uid, HELP_ES.format(m=MORNING, e=EVENING), reply_markup=menu_kb())
         await send(uid, "А вот Ваше первое задание 👇")
         await send_today(uid)
+
+
+# ---------------- входной тест на уровень (только испанский) ----------------
+# Для нового ученика, который не «совсем новичок»: 5 слов вразброс по частотному
+# списку. По числу угаданных пропускаем простые слова, чтобы начать с нужного
+# места. Существующих учеников не касается — запускается только из онбординга.
+PLACE: dict = {}  # uid -> {"queue": [idx...], "correct": n, "total": n}
+SKIP_BY_SCORE = {0: 0, 1: 10, 2: 30, 3: 60, 4: 100, 5: 160}
+
+
+def _placement_indices():
+    n = len(WORDS)
+    idxs = sorted({min(n - 1, int(n * f)) for f in (0.03, 0.08, 0.15, 0.25, 0.40)})
+    return [i for i in idxs if i > 0]
+
+
+async def start_placement(uid: int):
+    q = _placement_indices()
+    if not q:
+        return await _after_placement(uid, 0)
+    PLACE[uid] = {"queue": q, "correct": 0, "total": len(q)}
+    await send(uid, "📊 <b>Короткая проверка уровня</b> — несколько слов, чтобы начать с нужного места.\n"
+                    "Не угадывайте: «🤷 Не знаю» — тоже хороший ответ.")
+    await placement_next(uid)
+
+
+async def placement_next(uid: int):
+    st = PLACE.get(uid)
+    if not st or not st["queue"]:
+        correct = st["correct"] if st else 0
+        PLACE.pop(uid, None)
+        return await _after_placement(uid, correct)
+    idx = st["queue"][0]
+    es, opts = vocab.question(idx)
+    kb = [[InlineKeyboardButton(text=WORDS[o][1][:60], callback_data=f"pl:{idx}:{o}")] for o in opts]
+    kb.append([InlineKeyboardButton(text="🤷 Не знаю", callback_data=f"pl:{idx}:-1")])
+    await send(uid, f"Что значит <b>{es}</b>?  <i>(осталось {len(st['queue'])})</i>",
+               reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
+
+
+async def _after_placement(uid: int, correct: int):
+    skip = min(SKIP_BY_SCORE.get(correct, 0), max(0, len(WORDS) - 10))
+    if skip:
+        past = (today() - timedelta(days=3650)).isoformat()  # «известно ранее», не как новое сегодня
+        far = (today() + timedelta(days=3650)).isoformat()   # на повтор не всплывёт
+        for i in range(skip):
+            db.c.execute("INSERT OR IGNORE INTO word_progress(student_id,idx,box,due,introduced) "
+                         "VALUES(?,?,6,?,?)", (uid, i, far, past))
+        db.c.commit()
+        await send(uid, f"Отлично — Вы уже многое знаете! 🎉 Пропускаю {skip} простых слов, "
+                        "начнём сразу с нового для Вас.")
+    else:
+        await send(uid, "Начнём с самых основ — так надёжнее 🙂")
+    await send(uid, HELP_ES.format(m=MORNING, e=EVENING), reply_markup=menu_kb())
+    await send(uid, "А вот Ваше первое задание 👇")
+    await send_today(uid)
+
+
+@dp.callback_query(F.data.startswith("pl:"))
+async def cb_placement(c: CallbackQuery):
+    uid = c.from_user.id
+    st = PLACE.get(uid)
+    if not st or not st["queue"]:
+        return await c.answer()
+    try:
+        _, idx, choice = c.data.split(":")
+        idx, choice = int(idx), int(choice)
+    except ValueError:
+        return await c.answer()
+    if st["queue"][0] != idx:
+        return await c.answer()
+    st["queue"].pop(0)
+    if choice == idx:
+        st["correct"] += 1
+        await c.answer("✅ Знаете!")
+    else:
+        await c.answer("Запомню 🙂")
+    try:
+        await c.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
+    await placement_next(uid)
 
 
 async def send_today(uid: int):
