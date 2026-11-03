@@ -64,16 +64,17 @@ def read_env(path: str) -> dict:
 
 
 def read_bots() -> list:
+    """Строки bots.list: <бот> <ПРЕФИКС> [файл кода, по умолчанию studybot.py]."""
     bots = []
     with open(os.path.join(HERE, "bots.list"), encoding="utf-8") as f:
         for line in f:
             parts = line.split("#", 1)[0].split()
             if len(parts) >= 2:
-                bots.append((parts[0], parts[1]))
+                bots.append((parts[0], parts[1], parts[2] if len(parts) > 2 else "studybot.py"))
     return bots
 
 
-def load_bot(name: str, prefix: str, root: str, first: bool = False):
+def load_bot(name: str, prefix: str, root: str, first: bool = False, script: str = "studybot.py"):
     """Загружает studybot.py как отдельный модуль со своими настройками. None — если нет токена."""
     token = os.getenv(f"{prefix}_BOT_TOKEN", "").strip()
     if not token and first:  # поле «Telegram bot token» на хостинге = первый бот из списка
@@ -87,7 +88,7 @@ def load_bot(name: str, prefix: str, root: str, first: bool = False):
     settings["BOT_TOKEN"] = token
     settings["DB_PATH"] = os.path.join(folder, "bot.db")
     os.environ.update(settings)  # studybot.py читает настройки при загрузке
-    spec = importlib.util.spec_from_file_location(f"studybot_{name}", os.path.join(HERE, "studybot.py"))
+    spec = importlib.util.spec_from_file_location(f"bot_{name}", os.path.join(HERE, script))
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     log.info("%s: загружен, база %s", name, settings["DB_PATH"])
@@ -116,9 +117,9 @@ async def run_forever(name: str, mod):
 async def main():
     root = data_root()
     loaded = []
-    for i, (name, prefix) in enumerate(read_bots()):
+    for i, (name, prefix, script) in enumerate(read_bots()):
         try:
-            mod = load_bot(name, prefix, root, first=(i == 0))
+            mod = load_bot(name, prefix, root, first=(i == 0), script=script)
         except Exception:
             log.exception("%s: не удалось загрузить", name)
             continue

@@ -1,3 +1,4 @@
-# бот (файл <бот>.env)  префикс_секретов
-bot_ispanskiy  ES
-bot_ii         AI
+# бот (файл <бот>.env)  префикс_секретов  [файл кода]
+bot_ispanskiy  ES  studybot.py
+bot_ii         AI  studybot.py
+bot_turkish    TR  turkbot.py
