@@ -622,10 +622,13 @@ async def game_next(uid: int):
                    else "Ничего страшного — так слова и запоминаются 💪 Сыграйте ещё раз!")
         return await send(uid, f"🏁 Игра окончена: <b>{r} из {t}</b>. {verdict}", reply_markup=games_kb())
     kind, pool, n = st["type"], game_pool(uid), st["total"]
+    used = st.setdefault("used", set())
+    pool = [i for i in pool if i not in used] or pool  # без повторов в одной игре
     num = f"{n + 1}/{GAME_ROUND}"
     if kind in ("rt", "au", "tr"):
         idx = random.choice(pool)
-        opts = distractors(idx, 3, pool) + [idx]
+        used.add(idx)
+        opts = distractors(idx, 3, game_pool(uid)) + [idx]
         random.shuffle(opts)
         st["q"] = {"idx": idx, "right": opts.index(idx)}
         if kind == "rt":
@@ -643,6 +646,7 @@ async def game_next(uid: int):
         return await send(uid, f"🧠 {num}. Что значит <b>{WORDS[idx][0]}</b>?", reply_markup=_opts_kb(labels, n))
     if kind == "sp":
         idx = random.choice(pool)
+        used.add(idx)
         st["q"] = {"idx": idx}
         tr, ru, kk = WORDS[idx]
         hint = f"\n<i>🇰🇿 подсказка: {kk}</i>" if kk and show_kk(uid) else ""
@@ -652,6 +656,7 @@ async def game_next(uid: int):
                               text="🤷 Не знаю — показать", callback_data=f"ga:{n}:skip")]]))
     if kind == "hm":
         q = games.harmony_question(pool)
+        used.add(q.get("idx"))
         q["right_i"] = q["options"].index(q["right"])
         st["q"] = q
         return await send(uid, f"🧩 {num}. <b>{q['word']}</b> ({ai.esc(q['ru'])})\n"
@@ -659,6 +664,7 @@ async def game_next(uid: int):
                           reply_markup=_opts_kb(q["options"], n))
     if kind == "vb":
         q = games.verb_question(pool)
+        used.add(q.get("idx"))
         q["right_i"] = q["options"].index(q["right"])
         st["q"] = q
         neg = " — <b>отрицание (НЕ)</b>" if q["neg"] else ""
