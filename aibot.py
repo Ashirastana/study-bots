@@ -1144,6 +1144,8 @@ async def scheduler():
 
 @dp.errors()
 async def on_error(event: ErrorEvent):
+    if "query is too old" in str(event.exception):  # нажали старую кнопку — не страшно, молчим
+        return True
     log.exception("Ошибка обработки: %s", event.exception)
     try:
         msg = event.update.message or (event.update.callback_query and event.update.callback_query.message)
