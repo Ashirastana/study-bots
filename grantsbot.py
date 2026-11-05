@@ -75,21 +75,25 @@ def _gn(q, lang="en"):
     return f"https://news.google.com/rss/search?q={quote(q + ' when:2d')}&{loc}"
 
 NEWS_FEEDS = {
-    "Google News: fully funded conference": _gn('"fully funded" conference OR summit OR forum'),
-    "Google News: fully funded fellowship": _gn('"fully funded" fellowship OR program leadership'),
-    "Google News: law & human rights": _gn('"fully funded" "human rights" OR law OR legal program'),
-    "Google News: business & invest": _gn('"fully funded" entrepreneurship OR startup OR investment program'),
-    "Google News: tourism": _gn('"fully funded" tourism OR hospitality program'),
-    "Google News: call for applications": _gn('"call for applications" "travel costs" youth'),
-    "Google News: summer school": _gn('"fully funded" "summer school" OR "winter school"'),
-    "Google News: exchange": _gn('"fully funded" exchange program youth OR students'),
-    "Google News: travel grant": _gn('"travel grant" OR "travel bursary" conference 2027'),
-    "Google News: UN / Council of Europe": _gn('UN OR "Council of Europe" OR OSCE youth programme "travel and accommodation"'),
-    "Google News: Erasmus+": _gn('Erasmus+ youth exchange OR training course Kazakhstan OR "Central Asia"'),
-    "Google News RU: обмены и школы": _gn('летняя школа OR программа обмена перелет проживание оплачиваются', "ru"),
-    "Google News RU: гранты": _gn('грант молодежь конференция OR форум OR стажировка оплачивается', "ru"),
-    "Google News RU: Казахстан": _gn('Казахстан грант OR стипендия студентам за рубежом', "ru"),
-    "Google News KZ": _gn('грант шетелде студенттер', "kk"),
+    "Google News: lawyers conference": _gn('"fully funded" conference OR seminar lawyers OR judges OR "legal professionals"'),
+    "Google News: study visit": _gn('"study visit" OR "study tour" "travel and accommodation" professionals'),
+    "Google News: leadership program": _gn('"fully funded" leadership program executives OR "senior professionals"'),
+    "Google News: rule of law training": _gn('"rule of law" OR "human rights" training "travel and accommodation covered"'),
+    "Google News: anti-corruption": _gn('anti-corruption OR integrity seminar "fully funded" professionals'),
+    "Google News: IVLP / exchange": _gn('IVLP OR "professional exchange" lawyers OR "civil society leaders"'),
+    "Google News: OSCE / UN / CoE": _gn('OSCE OR UNDP OR "Council of Europe" seminar Kazakhstan OR "Central Asia" lawyers'),
+    "Google News: arbitration mediation": _gn('arbitration OR mediation conference "travel grant" OR "fully funded"'),
+    "Google News RU: юристы": _gn('семинар OR стажировка для юристов перелет и проживание оплачиваются', "ru"),
+    "Google News RU: руководители": _gn('программа для руководителей обмен опытом перелет проживание за счет', "ru"),
+    "Google News RU: Казахстан": _gn('Казахстан стажировка за рубежом юристы OR судьи OR адвокаты', "ru"),
+    "Google News KZ": _gn('заңгерлер семинар шетелде тегін', "kk"),
+    "Google News: cultural exchange": _gn('"cultural exchange" program professionals OR leaders "fully funded"'),
+    "Google News: christian leaders": _gn('christian OR church OR pastors leadership conference "travel and accommodation" OR "fully funded"'),
+    "Google News: family & fatherhood": _gn('family OR fatherhood OR parenting conference OR seminar "fully funded" OR "travel covered"'),
+    "Google News: language course": _gn('"language course" OR "language program" professionals "fully funded" short-term'),
+    "Google News RU: христиане": _gn('христианская конференция OR семинар для служителей пасторов перелет проживание', "ru"),
+    "Google News: volunteering": _gn('volunteer program OR volunteering short-term "travel and accommodation" OR "fully funded" adults'),
+    "Google News RU: семья": _gn('семейные ценности OR отцовство OR воспитание детей форум OR семинар перелет проживание', "ru"),
 }
 
 # Публичные Telegram-каналы (читаются через t.me/s/<канал>, без входа)
@@ -108,37 +112,87 @@ TG_CHANNELS = [
 ]
 
 # ---------- Фильтры ----------
+# Профиль получателя: практикующий юрист / руководитель / лидер из Казахстана, 50+ лет, не студент,
+# без IELTS/TOEFL. Нужны КОРОТКИЕ программы (семинар, конференция, повышение квалификации, стажировка
+# до 1 месяца), где оплачены перелёт и проживание и нет платы за участие.
+PROFILE = ("практикующий юрист, руководитель и общественный лидер из Казахстана, возраст 50+, НЕ студент, "
+           "без сертификатов IELTS/TOEFL и без возможности сдавать экзамены")
+
 FUNDED = [
-    "fully funded", "fully-funded", "fully sponsored", "full scholarship", "all expenses",
-    "expenses covered", "airfare", "travel grant", "travel support", "covers travel",
-    "stipend", "funded trip", "полностью оплач", "полное финансирование", "оплачивают перел",
-    "покрывает", "толық қаржыландыр",
+    "fully funded", "fully-funded", "fully sponsored", "all expenses", "all-expenses", "expenses covered",
+    "travel and accommodation", "accommodation and travel", "airfare", "flights and accommodation",
+    "travel costs", "travel grant", "travel support", "covers travel", "round-trip", "return flight",
+    "полностью оплач", "полное финансирование", "оплачивают перел", "перелет и проживание",
+    "перелёт и проживание", "проезд и проживание", "покрываются расходы", "толық қаржыландыр",
 ]
 TOPICS = {
-    "лидерство": ["leadership", "leader", "лидер", "көшбасшы"],
-    "экономика/бизнес": ["econom", "business", "entrepreneur", "startup", "invest", "finance",
-                         "экономи", "бизнес", "инвест", "предприним", "стартап"],
-    "право": ["law", "legal", "justice", "court", "lawyer", "право", "юрид", "юрист", "құқық"],
-    "права человека": ["human rights", "права человека", "democracy", "демократ", "rule of law"],
+    "лидерство и управление": ["leadership", "leader", "management", "executive", "governance", "public administration",
+                               "лидер", "руковод", "управлен", "көшбасшы"],
+    "право и юристы": ["law", "legal", "justice", "court", "lawyer", "judge", "attorney", "advocate", "bar association",
+                       "arbitration", "mediation", "право", "юрид", "юрист", "адвокат", "судь", "арбитраж",
+                       "медиац", "құқық"],
+    "права человека": ["human rights", "права человека", "rule of law", "democracy", "демократ", "верховенств"],
+    "антикоррупция": ["anti-corruption", "anticorruption", "integrity", "коррупц"],
+    "экономика и бизнес": ["econom", "business", "entrepreneur", "invest", "finance", "trade",
+                           "экономи", "бизнес", "инвест", "предприним", "торгов"],
+    "госуправление и дипломатия": ["diplomac", "diplomat", "international relations", "public policy",
+                                   "civil serv", "дипломат", "госслуж", "государственн"],
     "туризм": ["tourism", "hospitality", "туризм"],
-    "дипломатия": ["diplomac", "diplomat", "international relations", "дипломат", "united nations"],
+    "культурные обмены": ["cultural exchange", "intercultural", "cross-cultural", "culture", "культурн",
+                          "межкультур", "мәдени"],
+    "христианство (протестанты)": ["christian", "church", "protestant", "evangelical", "pastor", "bible", "biblical",
+                                   "theolog", "faith-based", "faith leaders", "religious freedom", "interfaith",
+                                   "spiritual", "христиан", "церк", "протестант", "евангел", "пастор", "библ",
+                                   "богослов", "духовн", "служител"],
+    "семейные ценности": ["family values", "family", "marriage", "семейн", "семья", "семьи", "брак", "отбасы"],
+    "воспитание детей": ["parenting", "parents", "child", "children", "upbringing", "воспитан", "дети", "детей",
+                         "родител", "бала тәрбие"],
+    "отцовство и роль мужа": ["fatherhood", "fathers", "father", "husband", "men's role", "role of men", "отцовств",
+                              "отец", "отцы", "отцов", "муж", "әке"],
+    "языки": ["language", "linguistic", "english course", "translation", "языков", "язык", "лингв", "перевод", "тіл"],
+    "волонтёрство": ["volunteer", "volunteering", "волонтер", "волонтёр", "доброволь", "ерікті"],
 }
-FORMAT = ["conference", "summit", "forum", "fellowship", "grant", "scholarship", "exchange",
-          "program", "school", "конференц", "саммит", "форум", "грант", "стипенд", "обмен", "стажир"]
-FEE_WORDS = ["application fee", "registration fee", "pay the fee", "взнос", "оплатить заявку"]
-
-
-GRANT_WORDS = ["grant", "scholarship", "fellowship", "грант", "стипенд", "шәкіртақы"]
+FORMAT = ["conference", "summit", "forum", "seminar", "workshop", "training", "study visit", "study tour",
+          "exchange program", "exchange programme", "professional development", "capacity building",
+          "short course", "short-term", "visiting program", "ivlp", "internship", "fellowship", "symposium",
+          "конференц", "семинар", "форум", "тренинг", "стажировк", "повышени", "квалификац", "учебн",
+          "обмен опытом", "саммит", "симпозиум", "language course", "language program", "cultural exchange",
+          "retreat", "курс", "культурный обмен", "volunteer program", "volunteering", "волонтер", "волонтёр"]
+# Сразу мимо: учёба на степень, студенты, молодёжь, возрастной потолок, экзамены
+NOT_FOR_US = ["bachelor", "master's", "masters degree", "master degree", "phd", "doctoral", "undergraduate",
+              "high school", "for students", "students only", "university students", "graduate students",
+              "youth", "young leaders", "young professionals", "young people", "молодеж", "молодёж", "студент",
+              "магистрат", "бакалавр", "докторант", "аспирант", "школьник", "жастар"]
+EXAMS = ["ielts", "toefl", "duolingo english", "gre ", "gmat", "pte academic", "cambridge english"]
+EXAM_OK = ["no ielts", "ielts not required", "ielts is not required", "without ielts", "no toefl",
+           "toefl not required", "без ielts", "без toefl"]
+AGE_CAP = re.compile(r"(?:aged?|age(?:d)?\s+between|under|below|not older than|up to|до)\s*(?:the age of\s*)?"
+                     r"(?:1[5-9]\s*(?:-|–|to|and)\s*)?([1-4]\d)\s*(?:years|лет|y\.?o)?", re.I)
+FEE_WORDS = ["application fee", "registration fee", "participation fee", "pay the fee", "self-funded",
+             "partially funded", "partial funding", "взнос", "оплатить заявку", "за свой счет", "за свой счёт"]
 
 
 def classify(text: str, news: bool = False):
-    """None — не подходит; иначе (темы, есть_ли_взнос). Для новостей грант = достаточный признак."""
+    """None — точно не подходит; иначе (темы, есть_ли_взнос). Окончательно решает ИИ (ai_filter)."""
     t = " " + text.lower() + " "
-    funded = any(w in t for w in FUNDED) or (news and any(w in t for w in GRANT_WORDS))
-    if not funded or not any(w in t for w in FORMAT):
+    if not any(w in t for w in FORMAT):
         return None
-    topics = [name for name, words in TOPICS.items() if any(w in t for w in words)] or ["другое"]
-    return topics, any(w in t for w in FEE_WORDS)
+    if any(w in t for w in NOT_FOR_US):
+        return None
+    if any(w in t for w in EXAMS) and not any(w in t for w in EXAM_OK):
+        return None
+    for m in AGE_CAP.finditer(t):
+        if int(m.group(1)) < 50 and re.search(r"age|aged|лет|years|older", m.group(0), re.I):
+            return None
+    funded = any(w in t for w in FUNDED) or (news and "fully" in t)
+    if not funded:
+        return None
+    topics = [name for name, words in TOPICS.items() if any(w in t for w in words)]
+    if not topics:
+        return None
+    t_fee = re.sub(r"no (?:application |registration |participation )?fees?|free of charge|without (?:any )?fee|"
+                   r"без (?:взноса|оплаты)|бесплатн", " ", t)
+    return topics, any(w in t_fee for w in FEE_WORDS)
 
 
 DEADLINE_RE = re.compile(r"(?:deadline|apply by|closing date|дедлайн|срок подачи|прием заявок до)\s*[:\-–]?\s*"
@@ -273,8 +327,12 @@ async def collect():
     return fresh
 
 
-def _fmt(src, title, link, topics, fee, deadline="", text=""):
+def _fmt(src, title, link, topics, fee, deadline="", note="", text=""):
+    if not text and note and not note.startswith("✅"):  # старый формат без заметки ИИ
+        note, text = "", note
     msg = f"🌍 <b>{html.escape(title)}</b>\n🏷 {', '.join(topics)}\n"
+    if note:
+        msg += html.escape(note) + "\n"
     if deadline:
         msg += f"⏰ Дедлайн: {html.escape(deadline)}\n"
     msg += f"📰 {html.escape(src)}\n{link}"
@@ -311,20 +369,21 @@ async def _send(chats, items):
 
 # ---------- ИИ-разбор: документы, требования, как подать ----------
 ADVISOR = """Ты — опытный консультант по международным грантам, стипендиям, конференциям и программам обмена.
-Пользователь — студент-юрист 3 курса из Казахстана (паспорт Казахстана), говорит по-русски.
+Пользователь — практикующий юрист, руководитель и лидер из Казахстана (паспорт Казахстана), 50+ лет, не студент,
+без IELTS/TOEFL, говорит по-русски.
 Отвечай по-русски, коротко и по делу, в формате Telegram (без таблиц, без markdown-заголовков; можно • и эмодзи).
 Опирайся на текст страницы программы, если он дан. Чего на странице нет — так и пиши «на странице не указано»,
 а затем, отдельно, дай типичный ответ для таких программ с пометкой «обычно». Ничего не выдумывай как факт."""
 
 DOCS_TASK = """Разбери эту возможность по пунктам:
 1. Что это и где/когда проходит.
-2. Кто может подать (возраст, страна, уровень, язык — нужен ли IELTS/TOEFL). Подходит ли студенту из Казахстана?
+2. Кто может подать (возраст, страна, опыт, язык — нужен ли IELTS/TOEFL или другой экзамен). Подходит ли юристу/руководителю 50+ из Казахстана без IELTS?
 3. Что оплачивают (перелёт, проживание, питание, виза, стипендия) и что НЕ оплачивают.
 4. Есть ли взнос за подачу/участие — и сколько. Если есть платный взнос или «полностью оплачено только топ-10» — предупреди.
 5. Дедлайн.
 6. 📄 Список документов для подачи (CV, мотивационное письмо, эссе, рекомендации, паспорт, справка с учёбы, видео и т.д.).
 7. Как подать — шаги и ссылка.
-8. 💡 2–3 совета, как повысить шансы именно этому студенту (юрист, Казахстан).
+8. 💡 2–3 совета, как повысить шансы именно этому человеку (практикующий юрист и руководитель 50+, Казахстан).
 9. Нужна ли виза и как её обычно получают из Казахстана."""
 
 PAGE_RE_DROP = re.compile(r"<(script|style|noscript|svg|header|footer|nav)[^>]*>.*?</\1>", re.S | re.I)
@@ -417,10 +476,57 @@ async def _reply_long(m: Message, text: str):
         await m.answer(html.escape(text[i:i + 3900]))
 
 
+AI_FILTER = """Ты строго отбираешь возможности для одного человека: {profile}.
+Подходит ТОЛЬКО если ВСЁ выполнено:
+1) формат: семинар, конференция, форум, тренинг, повышение квалификации, учебный визит или стажировка НЕ ДОЛЬШЕ 1 месяца
+   (не учёба на степень, не стипендия на годы, не длинная стажировка/fellowship);
+2) для специалистов/руководителей, НЕ для студентов и НЕ только для молодёжи; нет возрастного ограничения ниже 50 лет;
+3) бесплатно для участника (нет платы за участие/регистрацию);
+4) организаторы оплачивают ПЕРЕЛЁТ и ПРОЖИВАНИЕ (если оплачивают только что-то одно или «частично» — не подходит);
+5) не требуется IELTS, TOEFL или любой другой экзамен/сертификат;
+6) можно подать из Казахстана (или из любой страны).
+Если по тексту что-то неясно, но в целом похоже — ok=true и напиши, что уточнить.
+Для каждого пункта списка верни объект {{"n": номер, "ok": true/false, "why": "1 строка почему", "covers": "что оплачивают",
+"length": "длительность или пусто"}}. Ответь ТОЛЬКО JSON-массивом."""
+
+
+async def ai_filter(items):
+    """ИИ читает каждую находку и оставляет только то, что подходит под профиль."""
+    if not (groq_chat and GROQ_KEY) or not items:
+        return items
+    import json as _j
+    keep = []
+    for i in range(0, len(items), 6):
+        batch = items[i:i + 6]
+        listing = "\n\n".join(f"{n + 1}. {it[1]}\n{it[-1][:1200]}" for n, it in enumerate(batch))
+        try:
+            raw = await groq_chat([{"role": "system", "content": AI_FILTER.format(profile=PROFILE)},
+                                   {"role": "user", "content": listing}], max_tokens=1500, temperature=0.1)
+            raw = re.sub(r"^\x60{3}(?:json)?|\x60{3}$", "", raw.strip(), flags=re.M)
+            m = re.search(r"\[.*\]", raw, re.S)
+            verdicts = _j.loads(m.group(0) if m else raw)
+        except Exception as e:
+            log.warning("ИИ-фильтр: %s — пачку пропускаю до следующей проверки", e)
+            continue
+        for v in verdicts:
+            n = int(v.get("n", 0)) - 1
+            if 0 <= n < len(batch) and v.get("ok"):
+                it = list(batch[n])
+                note = f"✅ {v.get('why', '')}"
+                if v.get("covers"):
+                    note += f"\n💸 Оплачивают: {v['covers']}"
+                if v.get("length"):
+                    note += f"\n🗓 {v['length']}"
+                it.insert(6, note)
+                keep.append(tuple(it))
+        log.info("ИИ-фильтр: %s из %s подходят", sum(1 for v in verdicts if v.get("ok")), len(batch))
+    return keep
+
+
 async def check(manual_chat=None):
     async with _lock:
         first = _seen_count() == 0
-        items = await collect()
+        items = await ai_filter(await collect())
         if first:
             items = items[:FIRST_RUN_LIMIT]  # остальное старое — просто запомнили
         if manual_chat and not items:
@@ -433,9 +539,10 @@ async def check(manual_chat=None):
 async def cmd_start(m: Message):
     with closing(_db()) as c, c:
         c.execute("INSERT OR IGNORE INTO subs(chat_id) VALUES (?)", (m.chat.id,))
-    await m.answer("Подписка включена ✅\nБуду присылать полностью оплачиваемые конференции, гранты, "
-                   "стипендии и бизнес-программы со всего мира (30+ сайтов, Telegram-каналы, Google News): "
-                   f"лидерство, экономика, право, права человека, туризм, дипломатия и другое. Проверяю каждые {CHECK_EVERY_MIN} мин.\n\n"
+    await m.answer("Подписка включена ✅\nПрисылаю только короткие программы для практикующих юристов, руководителей и "
+                   "лидеров 50+: семинары, конференции, повышение квалификации, стажировки до 1 месяца. "
+                   "Бесплатно, перелёт и проживание оплачивают, без IELTS/TOEFL и экзаменов, не для студентов.\n"
+                   "Темы: " + ", ".join(TOPICS) + f". Проверяю каждые {CHECK_EVERY_MIN} мин.\n\n"
                    "/now — проверить сейчас\n/list — последние находки (/list право — с фильтром)\n"
                    "/sources — источники\n/stop — отписаться\n\n"
                    "📄 Под каждым уведомлением есть кнопка «Документы и требования».\n"
