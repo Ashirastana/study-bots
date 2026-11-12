@@ -122,7 +122,7 @@ async def run_forever(name: str, mod):
 async def main():
     root = data_root()
     loaded = []
-    # BOTS=bot_ii — запустить на этом сервере только этих ботов (через запятую); пусто = всех.
+    # BOTS=bot_grants — запустить на этом сервере только этих ботов (через запятую); пусто = всех.
     # Так одни и те же файлы можно держать на двух хостингах, а боты не мешают друг другу.
     only = {b.strip() for b in os.getenv("BOTS", "").split(",") if b.strip()}
     first = True  # поле «Telegram bot token» хостинга = первый бот, который запускается на этом сервере
