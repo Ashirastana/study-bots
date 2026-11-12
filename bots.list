@@ -1,6 +1,6 @@
 # бот (файл <бот>.env)  префикс_секретов  [файл кода]  [separate — только где BOTS=<бот>]
 bot_ispanskiy  ES  studybot.py
-bot_ii         AI  aibot.py      # допишите «separate», чтобы запускать только где BOTS=bot_ii
+# bot_ii       AI  aibot.py      # ВЫКЛЮЧЕН 12.11.2026 — чтобы вернуть, уберите «# » в начале строки
 bot_turkish    TR  turkbot.py
 bot_grants     GR  grantsbot.py
 bot_olx        OLX olxbot.py
