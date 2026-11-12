@@ -2,4 +2,4 @@
 bot_ispanskiy  ES  studybot.py
 bot_turkish    TR  turkbot.py
 bot_grants     GR  grantsbot.py
-bot_olx        OLX olxbot.py
+# bot_olx      OLX olxbot.py     # ВЫКЛЮЧЕН на хостинге 12.11.2026: OLX работает только с казахстанского IP, бот запущен на Mac
