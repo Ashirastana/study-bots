@@ -32,6 +32,7 @@ from db import DB  # noqa: E402
 from vocab import ORDER, Vocab, word_card  # noqa: E402
 from translit import translit  # noqa: E402
 import cards  # noqa: E402
+import webapp  # noqa: E402
 from vocab_data import WORDS  # noqa: E402
 import tts  # noqa: E402
 
@@ -148,6 +149,7 @@ BTN_HELP = "❓ Как пользоваться"
 
 
 BTN_S_WORDS, BTN_S_QUIZ, BTN_S_TALK, BTN_MORE = "📚 Слова", "🧠 Тест", "🗣 Учитель", "☰ Ещё"
+BTN_PLAY = "🎮 Играть"
 
 
 def menu_kb():
@@ -156,7 +158,7 @@ def menu_kb():
         return None
     K = KeyboardButton
     return ReplyKeyboardMarkup(keyboard=[
-        [K(text=BTN_S_WORDS), K(text=BTN_S_QUIZ), K(text=BTN_S_TALK), K(text=BTN_MORE)],
+        [K(text=BTN_PLAY), K(text=BTN_S_WORDS), K(text=BTN_S_TALK), K(text=BTN_MORE)],
     ], resize_keyboard=True, is_persistent=True, input_field_placeholder="Напишите по-испански или запишите голос 🎤")
 
 
@@ -248,8 +250,8 @@ async def notify_admin(text: str):
 
 
 HELP_ES = ("❓ Всё — кнопками внизу 👇\n\n"
-           "📚 Слова → 🧠 Тест → 🗣 Учитель (текстом или голосом 🎤)\n"
-           "☰ Ещё — задание дня, предложения, успехи\n\n"
+           "🎮 Играть — урок дня и игры\n📚 Слова · 🗣 Учитель (текстом или голосом 🎤)\n"
+           "☰ Ещё — тест, задание дня, предложения, успехи\n\n"
            "Непонятно? Напишите «не понимаю» 🙂")
 HELP_AI = ("• Каждое утро в {m} — задание дня\n"
            "• ❓ Пиши вопрос обычным сообщением — веду как наставник: шаги, готовые промпты, проверка\n"
@@ -443,8 +445,8 @@ async def cb_placement(c: CallbackQuery):
 
 async def send_today(uid: int):
     di = db.day_index(uid, today())
-    if ES and sent_once(f"menu2:{uid}", date(2000, 1, 1)):  # один раз: заменить большое меню на маленькое
-        await send(uid, "Меню внизу стало компактнее 👇 Остальное — в «☰ Ещё».", reply_markup=menu_kb())
+    if ES and sent_once(f"menu3:{uid}", date(2000, 1, 1)):  # один раз: заменить большое меню на маленькое
+        await send(uid, "Новое меню 👇 «🎮 Играть» — урок дня и игры с картинками.", reply_markup=menu_kb())
     await send(uid, plan.today_text(di, TRACK), reply_markup=report_kb(uid))
     if ES:
         await send_words(uid)
@@ -459,7 +461,10 @@ async def send_words(uid: int):
                         "Дальше — колода «Spanish Top 5000» в Anki (как в плане). "
                         "Повторение старых слов здесь продолжается: /povtor" % len(WORDS))
         return
+    link = play_link(uid)
+    await webapp.set_menu(bot, uid, link)
     kb = InlineKeyboardMarkup(inline_keyboard=[
+        [webapp.button(link)],
         [InlineKeyboardButton(text="🔊 Послушать слова", callback_data="listen")],
         [InlineKeyboardButton(text="🧠 Проверить себя", callback_data="povtor")],
         [InlineKeyboardButton(text="🪜 Составить предложение", callback_data="ladder")]])
@@ -1043,11 +1048,24 @@ async def b_help(m, s):
     await send(s["id"], HELP_ES.format(m=MORNING, e=EVENING), reply_markup=menu_kb())
 
 
+def play_link(uid: int) -> str:
+    """Ссылка на мини-приложение: выученные слова + слова сегодняшнего дня."""
+    today_idx = vocab.give_new(uid, today())
+    return webapp.url("es", [r[0] for r in db.c.execute("SELECT idx FROM word_progress WHERE student_id=?", (uid,))], today_idx, today())
+
+
+async def b_play(m, s):
+    link = play_link(s["id"])
+    await webapp.set_menu(bot, s["id"], link)
+    await m.answer("🎮 Урок дня и игры — всё здесь 👇",
+                   reply_markup=InlineKeyboardMarkup(inline_keyboard=[[webapp.button(link)]]))
+
+
 async def b_more(m, s):
     await m.answer("Что откроем? 👇", reply_markup=more_kb())
 
 
-MORE_ITEMS = [BTN_TODAY, BTN_LISTEN, BTN_LADDER, BTN_MISTAKES, BTN_PROGRESS, BTN_HELP]
+MORE_ITEMS = [BTN_QUIZ, BTN_TODAY, BTN_LISTEN, BTN_LADDER, BTN_MISTAKES, BTN_PROGRESS, BTN_HELP]
 
 
 @dp.callback_query(F.data.startswith("menu:"))
@@ -1065,7 +1083,7 @@ async def cb_menu(c: CallbackQuery):
 BUTTONS = {BTN_TODAY: b_today, BTN_WORDS: b_words, BTN_LISTEN: b_listen, BTN_QUIZ: b_quiz,
            BTN_TALK: b_talk, BTN_PROGRESS: b_progress, BTN_MISTAKES: b_mistakes, BTN_HELP: b_help,
            BTN_LADDER: b_ladder, BTN_S_WORDS: b_words, BTN_S_QUIZ: b_quiz, BTN_S_TALK: b_talk,
-           BTN_MORE: b_more}
+           BTN_MORE: b_more, BTN_PLAY: b_play}
 
 
 # ---------------- преподаватель ----------------
