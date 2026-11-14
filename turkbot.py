@@ -158,18 +158,22 @@ BTN_LADDER = "🪜 Составить предложение"
 BTN_LESSON, BTN_GAMES, BTN_VIDEO = "📖 Урок дня", "🎮 Игры", "🎬 Видео и подкасты"
 
 
+BTN_S_WORDS, BTN_S_QUIZ, BTN_S_TALK, BTN_MORE = "📚 Слова", "🧠 Тест", "🗣 Учитель", "☰ Ещё"
+
+
 def menu_kb():
+    """Компактное меню — одна строка внизу, остальное по кнопке «☰ Ещё»."""
     if not ES:
         return None
     K = KeyboardButton
     return ReplyKeyboardMarkup(keyboard=[
-        [K(text=BTN_TODAY), K(text=BTN_LESSON)],
-        [K(text=BTN_WORDS), K(text=BTN_LISTEN)],
-        [K(text=BTN_QUIZ), K(text=BTN_GAMES)],
-        [K(text=BTN_TALK), K(text=BTN_VIDEO)],
-        [K(text=BTN_LADDER), K(text=BTN_MISTAKES)],
-        [K(text=BTN_PROGRESS), K(text=BTN_HELP)],
+        [K(text=BTN_S_WORDS), K(text=BTN_S_QUIZ), K(text=BTN_S_TALK), K(text=BTN_MORE)],
     ], resize_keyboard=True, is_persistent=True, input_field_placeholder="Пишите по-турецки или запишите голос 🎤")
+
+
+def more_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=t, callback_data=f"menu:{n}")] for n, t in enumerate(MORE_ITEMS)])
 
 
 def report_kb(uid: int | None = None) -> InlineKeyboardMarkup:
@@ -257,20 +261,11 @@ async def notify_admin(text: str):
         log.warning("admin notify failed: %s", e)
 
 
-HELP_ES = ("❓ <b>Как пользоваться ботом</b>\n\n"
-           "Всё делается кнопками внизу экрана 👇\n\n"
-           "📅 <b>Задание на сегодня</b> — план дня, маленькими шагами.\n"
-           "📖 <b>Урок дня</b> — правило грамматики с примерами и заданием.\n"
-           "📚 <b>Слова дня</b> — 10 новых слов с картинками. Новые приходят каждое утро сами.\n"
-           "🔊 <b>Послушать слова</b> — диктор прочитает слова, повторяйте вслух.\n"
-           "🧠 <b>Проверить слова</b> — повторение: бот помнит, что Вы знаете, и возвращает забытое.\n"
-           "🎮 <b>Игры</b> — перевод в обе стороны, на слух, правописание, окончания, глаголы.\n"
-           "🗣 <b>Поговорить с учителем</b> — ИИ-учитель по-турецки. Отвечайте текстом или голосом "
-           "(<b>нажмите и держите 🎤</b>). Он поправит ошибки и поставит оценку.\n"
-           "🎬 <b>Видео и подкасты</b> — что смотреть и слушать на Вашем уровне.\n"
-           "📈 <b>Мои успехи</b> — серия дней, слова, оценки.\n\n"
-           "⏰ Каждое утро в {m} — задание, вечером в {e} — напоминание повторить слова.\n\n"
-           "Если что-то непонятно — напишите по-русски «не понимаю» 🙂")
+HELP_ES = ("❓ Всё — кнопками внизу 👇\n\n"
+           "📚 Слова → 🧠 Тест → 🗣 Учитель (текстом или голосом 🎤)\n"
+           "☰ Ещё — урок, игры, предложения, видео, успехи\n\n"
+           "⏰ Утром в {m} — задание, вечером в {e} — напоминание.\n"
+           "Непонятно? Напишите «не понимаю» 🙂")
 HELP_AI = ("• Каждое утро в {m} — задание дня\n"
            "• ❓ Пиши вопрос обычным сообщением — веду как наставник: шаги, готовые промпты, проверка\n"
            "• 📎 Результаты (фото, видео, ссылки, файлы) — приму и передам преподавателю\n"
@@ -471,6 +466,8 @@ async def cb_placement(c: CallbackQuery):
 
 async def send_today(uid: int):
     di = db.day_index(uid, today())
+    if sent_once(f"menu2:{uid}", date(2000, 1, 1)):  # один раз: заменить большое меню на маленькое
+        await send(uid, "Меню внизу стало компактнее 👇 Остальное — в «☰ Ещё».", reply_markup=menu_kb())
     await send(uid, plan.today_text(di, TRACK), reply_markup=report_kb(uid))
     await send(uid, lessons.lesson_text(di))
     await send_words(uid)
@@ -1345,9 +1342,30 @@ async def b_video(m, s):
         InlineKeyboardButton(text=f"▶️ Видео этой недели: {plan.video_name(w)}", url=plan.video_url(w))]]))
 
 
+async def b_more(m, s):
+    await m.answer("Что откроем? 👇", reply_markup=more_kb())
+
+
+MORE_ITEMS = [BTN_TODAY, BTN_LESSON, BTN_GAMES, BTN_LISTEN, BTN_LADDER, BTN_VIDEO,
+              BTN_MISTAKES, BTN_PROGRESS, BTN_HELP]
+
+
+@dp.callback_query(F.data.startswith("menu:"))
+async def cb_menu(c: CallbackQuery):
+    await c.answer()
+    s = student_or_none(c.from_user.id)
+    try:
+        label = MORE_ITEMS[int(c.data.split(":")[1])]
+    except (ValueError, IndexError):
+        return
+    if s:
+        await BUTTONS[label](c.message, s)
+
+
 BUTTONS = {BTN_TODAY: b_today, BTN_WORDS: b_words, BTN_LISTEN: b_listen, BTN_QUIZ: b_quiz,
            BTN_TALK: b_talk, BTN_PROGRESS: b_progress, BTN_HELP: b_help, BTN_MISTAKES: b_mistakes,
-           BTN_LESSON: b_lesson, BTN_GAMES: b_games, BTN_VIDEO: b_video, BTN_LADDER: b_ladder}
+           BTN_LESSON: b_lesson, BTN_GAMES: b_games, BTN_VIDEO: b_video, BTN_LADDER: b_ladder,
+           BTN_S_WORDS: b_words, BTN_S_QUIZ: b_quiz, BTN_S_TALK: b_talk, BTN_MORE: b_more}
 
 
 # ---------------- преподаватель ----------------

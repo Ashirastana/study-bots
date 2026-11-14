@@ -147,17 +147,22 @@ BTN_LADDER = "🪜 Составить предложение"
 BTN_HELP = "❓ Как пользоваться"
 
 
+BTN_S_WORDS, BTN_S_QUIZ, BTN_S_TALK, BTN_MORE = "📚 Слова", "🧠 Тест", "🗣 Учитель", "☰ Ещё"
+
+
 def menu_kb():
+    """Компактное меню — одна строка внизу, остальное по кнопке «☰ Ещё»."""
     if not ES:
         return None
     K = KeyboardButton
     return ReplyKeyboardMarkup(keyboard=[
-        [K(text=BTN_TODAY), K(text=BTN_WORDS)],
-        [K(text=BTN_LISTEN), K(text=BTN_QUIZ)],
-        [K(text=BTN_TALK), K(text=BTN_LADDER)],
-        [K(text=BTN_PROGRESS), K(text=BTN_MISTAKES)],
-        [K(text=BTN_HELP)],
+        [K(text=BTN_S_WORDS), K(text=BTN_S_QUIZ), K(text=BTN_S_TALK), K(text=BTN_MORE)],
     ], resize_keyboard=True, is_persistent=True, input_field_placeholder="Напишите по-испански или запишите голос 🎤")
+
+
+def more_kb():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=t, callback_data=f"menu:{n}")] for n, t in enumerate(MORE_ITEMS)])
 
 
 def report_kb(uid: int | None = None) -> InlineKeyboardMarkup:
@@ -243,8 +248,8 @@ async def notify_admin(text: str):
 
 
 HELP_ES = ("❓ Всё — кнопками внизу 👇\n\n"
-           "📚 Слова дня → 🔊 послушать → 🧠 проверить\n"
-           "🗣 Учитель — отвечайте текстом или голосом 🎤\n\n"
+           "📚 Слова → 🧠 Тест → 🗣 Учитель (текстом или голосом 🎤)\n"
+           "☰ Ещё — задание дня, предложения, успехи\n\n"
            "Непонятно? Напишите «не понимаю» 🙂")
 HELP_AI = ("• Каждое утро в {m} — задание дня\n"
            "• ❓ Пиши вопрос обычным сообщением — веду как наставник: шаги, готовые промпты, проверка\n"
@@ -438,6 +443,8 @@ async def cb_placement(c: CallbackQuery):
 
 async def send_today(uid: int):
     di = db.day_index(uid, today())
+    if ES and sent_once(f"menu2:{uid}", date(2000, 1, 1)):  # один раз: заменить большое меню на маленькое
+        await send(uid, "Меню внизу стало компактнее 👇 Остальное — в «☰ Ещё».", reply_markup=menu_kb())
     await send(uid, plan.today_text(di, TRACK), reply_markup=report_kb(uid))
     if ES:
         await send_words(uid)
@@ -1036,9 +1043,29 @@ async def b_help(m, s):
     await send(s["id"], HELP_ES.format(m=MORNING, e=EVENING), reply_markup=menu_kb())
 
 
+async def b_more(m, s):
+    await m.answer("Что откроем? 👇", reply_markup=more_kb())
+
+
+MORE_ITEMS = [BTN_TODAY, BTN_LISTEN, BTN_LADDER, BTN_MISTAKES, BTN_PROGRESS, BTN_HELP]
+
+
+@dp.callback_query(F.data.startswith("menu:"))
+async def cb_menu(c: CallbackQuery):
+    await c.answer()
+    s = student_or_none(c.from_user.id)
+    try:
+        label = MORE_ITEMS[int(c.data.split(":")[1])]
+    except (ValueError, IndexError):
+        return
+    if s:
+        await BUTTONS[label](c.message, s)
+
+
 BUTTONS = {BTN_TODAY: b_today, BTN_WORDS: b_words, BTN_LISTEN: b_listen, BTN_QUIZ: b_quiz,
            BTN_TALK: b_talk, BTN_PROGRESS: b_progress, BTN_MISTAKES: b_mistakes, BTN_HELP: b_help,
-           BTN_LADDER: b_ladder}
+           BTN_LADDER: b_ladder, BTN_S_WORDS: b_words, BTN_S_QUIZ: b_quiz, BTN_S_TALK: b_talk,
+           BTN_MORE: b_more}
 
 
 # ---------------- преподаватель ----------------
