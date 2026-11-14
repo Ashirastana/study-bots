@@ -29,6 +29,8 @@ import plan  # noqa: E402
 import points  # noqa: E402
 from db import DB  # noqa: E402
 from vocab import Vocab, word_card  # noqa: E402
+from translit import translit  # noqa: E402
+import cards  # noqa: E402
 from vocab_data import WORDS  # noqa: E402
 import tts  # noqa: E402
 
@@ -55,6 +57,7 @@ db = DB(os.getenv("DB_PATH", "bot.db"))
 db.c.execute("CREATE TABLE IF NOT EXISTS sent_log(key TEXT, day TEXT, PRIMARY KEY(key, day))")
 db.c.commit()
 vocab = Vocab(db.c, per_day=int(os.getenv("WORDS_PER_DAY", "10"))) if ES else None
+EMOJI_DIR = os.path.join(os.path.dirname(os.path.abspath(os.getenv("DB_PATH", "bot.db"))), "emoji")
 LOCKS: dict = {}
 _last_admin_alert = {"t": 0.0}
 
@@ -236,20 +239,10 @@ async def notify_admin(text: str):
         log.warning("admin notify failed: %s", e)
 
 
-HELP_ES = ("❓ <b>Как пользоваться ботом</b>\n\n"
-           "Всё делается кнопками внизу экрана 👇 Ничего печатать не нужно.\n\n"
-           "📅 <b>Задание на сегодня</b> — что сделать сегодня (3 шага).\n"
-           "📚 <b>Слова дня</b> — 10 новых слов. Новые приходят каждое утро сами.\n"
-           "🔊 <b>Послушать слова</b> — диктор прочитает слова, повторяйте вслух.\n"
-           "🧠 <b>Проверить слова</b> — игра: выберите правильный перевод. "
-           "Бот запоминает, что Вы знаете, и повторяет забытое.\n"
-           "🗣 <b>Поговорить с учителем</b> — учитель напишет вопрос по-испански. Отвечайте:\n"
-           "   • текстом — как обычное сообщение;\n"
-           "   • голосом — <b>нажмите и держите 🎤</b> (справа внизу), говорите, отпустите.\n"
-           "   Учитель мягко поправит ошибки и подскажет.\n"
-           "📈 <b>Мои успехи</b> — сколько дней подряд и сколько слов выучено.\n\n"
-           "⏰ Каждое утро в {m} я пришлю задание, а вечером в {e} напомню проверить слова.\n\n"
-           "Если что-то непонятно — просто напишите мне по-русски «не понимаю» 🙂")
+HELP_ES = ("❓ Всё — кнопками внизу 👇\n\n"
+           "📚 Слова дня → 🔊 послушать → 🧠 проверить\n"
+           "🗣 Учитель — отвечайте текстом или голосом 🎤\n\n"
+           "Непонятно? Напишите «не понимаю» 🙂")
 HELP_AI = ("• Каждое утро в {m} — задание дня\n"
            "• ❓ Пиши вопрос обычным сообщением — веду как наставник: шаги, готовые промпты, проверка\n"
            "• 📎 Результаты (фото, видео, ссылки, файлы) — приму и передам преподавателю\n"
@@ -294,10 +287,8 @@ async def start(m: Message, command: CommandObject):
         await notify_admin(f"🆕 Новый студент: {ai.esc(u.full_name)} (ID <code>{u.id}</code>)")
         await m.answer(
             f"¡Hola, {ai.esc(u.first_name)}! 👋\n\n"
-            "Я — Ваш помощник по испанскому языку. Каждый день я буду присылать небольшое задание "
-            "на 30–40 минут, новые слова и разговаривать с Вами по-испански.\n\n"
-            "Ошибаться — нормально, для этого я и нужен 🙂\n\n"
-            "Давайте познакомимся — <b>3 коротких вопроса</b>, отвечайте кнопками.")
+            "🕵️ Ваша секретная миссия — испанский. Каждый день — 15 минут и немного смеха.\n\n"
+            "Сначала 3 вопроса — отвечайте кнопками.")
         await ask_onboarding(u.id, 0)
         return
     hello = f"¡Hola, {ai.esc(u.first_name)}! 🎉" if ES else f"Привет, {ai.esc(u.first_name)}! 🎉"
@@ -352,10 +343,7 @@ if ES:
         st = ONB_STATE.pop(uid, {})
         db.set_profile(uid, f"Уровень: {st.get('lvl')}. Цель: {st.get('goal')}. "
                             f"Время в день: {st.get('time')}.")
-        light = st.get("time") == "15–20 минут"
-        await send(uid, "Спасибо! 🙏 Я всё запомнила и подстрою занятия под Вас."
-                        + ("\n\nРаз у Вас 15–20 минут — делайте каждый день хотя бы шаги 1 и 3, "
-                           "видео — когда будет время." if light else ""))
+        await send(uid, "Спасибо! 🙏 Подстрою занятия под Вас.")
         if st.get("lvl") != "Совсем не знаю":
             return await start_placement(uid)
         await send(uid, HELP_ES.format(m=MORNING, e=EVENING), reply_markup=menu_kb())
@@ -395,7 +383,7 @@ async def placement_next(uid: int):
         return await _after_placement(uid, correct)
     idx = st["queue"][0]
     es, opts = vocab.question(idx)
-    kb = [[InlineKeyboardButton(text=WORDS[o][1][:60], callback_data=f"pl:{idx}:{o}")] for o in opts]
+    kb = [[InlineKeyboardButton(text=WORDS[o][2][:60], callback_data=f"pl:{idx}:{o}")] for o in opts]
     kb.append([InlineKeyboardButton(text="🤷 Не знаю", callback_data=f"pl:{idx}:-1")])
     await send(uid, f"Что значит <b>{es}</b>?  <i>(осталось {len(st['queue'])})</i>",
                reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
@@ -461,16 +449,25 @@ async def send_words(uid: int):
                         "Дальше — колода «Spanish Top 5000» в Anki (как в плане). "
                         "Повторение старых слов здесь продолжается: /povtor" % len(WORDS))
         return
-    lines = [f"📚 <b>10 новых слов на сегодня</b>\n"]
-    lines += [f"{n}. {word_card(i)}" for n, i in enumerate(new, 1)]
-    lines.append("\n💡 <b>Как учить:</b>\n"
-                 "1. Нажмите «🔊 Послушать» — диктор прочитает каждое слово 2 раза.\n"
-                 "2. Повторяйте вслух за ним.\n"
-                 "3. Вечером нажмите «🧠 Проверить» — это игра, а не экзамен 🙂\n\n"
-                 "🇬🇧 — так это слово по-английски. Многие слова похожи, это помогает!")
-    await send(uid, "\n".join(lines), reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+    kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🔊 Послушать слова", callback_data="listen")],
-        [InlineKeyboardButton(text="🧠 Проверить себя", callback_data="povtor")]]))
+        [InlineKeyboardButton(text="🧠 Проверить себя", callback_data="povtor")]])
+    # Сначала — карточки-картинки (слово + картинка + транскрипция), как в детских карточках.
+    await bot.send_chat_action(uid, "upload_photo")
+    pic = await cards.words_image([WORDS[i] for i in new], EMOJI_DIR)
+    if pic:
+        try:
+            await bot.send_photo(uid, BufferedInputFile(pic, filename="palabras.png"),
+                                 caption="🔑 <b>Секретные пароли на сегодня</b>\n"
+                                         "🔊 Послушайте и повторите вслух 3 раза.",
+                                 reply_markup=kb)
+            return
+        except Exception as e:
+            log.warning("words photo: %s", e)
+    lines = ["🔑 <b>Секретные пароли на сегодня</b>\n"]
+    lines += [word_card(i) + "\n" for i in new]
+    lines.append("🔊 Послушайте и повторите вслух 3 раза.")
+    await send(uid, "\n".join(lines), reply_markup=kb)
 
 
 async def send_listen(uid: int):
@@ -512,9 +509,10 @@ async def quiz_next(uid: int):
         return
     idx = st["queue"][0]
     es, opts = vocab.question(idx)
-    kb = [[InlineKeyboardButton(text=WORDS[o][1][:60], callback_data=f"q:{idx}:{o}")] for o in opts]
+    kb = [[InlineKeyboardButton(text=WORDS[o][2][:60], callback_data=f"q:{idx}:{o}")] for o in opts]
     left = len(st["queue"])
-    await send(uid, f"🧠 Что значит <b>{es}</b>?  <i>(осталось {left})</i>", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
+    await send(uid, f"🧠 Что значит <b>{es}</b>?\n🗣 {translit(es)}  <i>(осталось {left})</i>",
+               reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
 
 
 async def start_quiz(uid: int, chat_answer):
@@ -616,8 +614,8 @@ if ES:
             await c.message.edit_reply_markup(reply_markup=None)
         except Exception:
             pass
-        res = "✅ Верно!" if ok else f"❌ Вы выбрали: {ai.esc(WORDS[choice][1])}\nПравильно:"
-        await send(uid, f"{res} {word_card(idx)}")
+        res = "✅ Верно!" if ok else f"❌ Не совсем 🙂 Правильно:"
+        await send(uid, f"{res}\n{word_card(idx)}")
         await quiz_next(uid)
 
     @dp.message(Command("anki"))
@@ -762,13 +760,12 @@ async def _finish_dialog(m: Message, s, user_text: str, raw: str, prefix: str, n
             k = text.find("Исправление")
             fb = " ".join(text[k:].replace("**", "").split())[:200] if k >= 0 else ""
             db.add_voice(s["id"], today(), user_text.replace("[ГОЛОС] ", ""), score, fb)
-    out = prefix + ai.clean_md(text)
+    out = prefix + (ai.es_lines(ai.clean_md(text)) if ES else ai.clean_md(text))
     kb = None
     if ES:
         if score is not None:
             out += f"\n\n📊 <b>Оценка: {score}/10</b>"
-        es_line = next((l.replace("🇪🇸", "").strip() for l in text.splitlines() if l.strip().startswith("🇪🇸")), "")
-        es_line = re.sub(r"\s*\([^)]*\)", "", es_line).strip()  # убрать русский перевод в скобках
+        es_line = ai.es_main_line(text)  # первая испанская фраза без перевода
         if es_line and await asyncio.to_thread(tts.spanish_voice):
             LAST_ES[m.from_user.id] = es_line
             kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(
@@ -950,10 +947,11 @@ async def b_mistakes(m, s):
 
 
 async def b_talk(m, s):
-    await m.answer("🗣 Отвечайте учителю текстом или голосом — <b>нажмите и держите 🎤</b> справа внизу.")
-    await dialog(m, s, "(Ученица нажала «Поговорить с учителем». Поздоровайся и задай ОДИН очень простой "
-                       "вопрос по-испански по теме недели или о её жизни — такой, на который она ещё не отвечала. "
-                       "Блок «Исправление» и оценку сейчас НЕ давай.)")
+    await m.answer("🗣 Отвечайте текстом или голосом — держите 🎤")
+    await dialog(m, s, "(Ученица нажала «Поговорить с учителем». Встреча со связным: поздоровайся одной "
+                       "весёлой строкой и задай ОДИН очень простой вопрос строкой 🇪🇸 по теме недели или о её жизни — "
+                       "такой, на который она ещё не отвечала, с подсказкой «💡 Можно ответить:». "
+                       "Коротко! Блок «Исправление» и оценку сейчас НЕ давай.)")
 
 
 async def b_progress(m, s):
@@ -1235,7 +1233,7 @@ async def main():
                  tts.spanish_voice())
         return await dp.start_polling(bot)
     if ES:
-        extra = [BotCommand(command="slova", description="10 слов на сегодня"),
+        extra = [BotCommand(command="slova", description="Слова на сегодня"),
                  BotCommand(command="povtor", description="Повторить слова (проверка)"),
                  BotCommand(command="urok", description="Урок по моей частой ошибке"),
                  BotCommand(command="test", description="Тест от репетитора"),

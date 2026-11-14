@@ -27,7 +27,7 @@ class Vocab:
         return [r[0] for r in rows]
 
     def give_new(self, uid, day: date):
-        """Выдаёт 10 новых слов на сегодня (повторный вызов в тот же день вернёт те же)."""
+        """Выдаёт новые слова на сегодня (per_day штук) (повторный вызов в тот же день вернёт те же)."""
         already = self.introduced_today(uid, day)
         if already:
             return already
@@ -66,7 +66,7 @@ class Vocab:
     def question(self, idx):
         """Испанское слово + 4 варианта перевода (1 верный)."""
         es, ru, en = WORDS[idx]
-        pool = [i for i in range(len(WORDS)) if i != idx and WORDS[i][1] != ru]
+        pool = [i for i in range(len(WORDS)) if i != idx and WORDS[i][1] != ru and WORDS[i][2] != en]
         wrong = random.sample(pool, 3)
         opts = wrong + [idx]
         random.shuffle(opts)
@@ -86,5 +86,7 @@ class Vocab:
 
 
 def word_card(idx) -> str:
+    """Слово для ученицы: испанский, транскрипция русскими буквами с ударением, перевод на английский."""
+    from translit import translit
     es, ru, en = WORDS[idx]
-    return f"<b>{es}</b> — {ru}  <i>🇬🇧 {en}</i>"
+    return f"🇪🇸 <b>{es}</b>\n🗣 {translit(es)} — <i>{en}</i>"
