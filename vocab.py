@@ -5,6 +5,41 @@ from datetime import date, timedelta
 
 from vocab_data import WORDS
 
+# Порядок изучения: от самых лёгких и понятных (приветствия, числа, вещи, которые
+# можно представить) к более сложным (глаголы, служебные слова, ложные друзья).
+# Индексы в WORDS не меняются — прогресс учеников сохраняется.
+EASY_FIRST = """
+hola|adiós|gracias|sí|no
+por favor|bien|mal|muy|perdón
+buenos días|buenas noches|hasta luego|de nada|mucho gusto
+uno|dos|tres|cuatro|cinco
+seis|siete|ocho|nueve|diez
+agua|café|casa|familia|amigo / amiga
+pan|leche|fruta|vino|cerveza
+madre|padre|hermano / hermana|hijo / hija|niño / niña
+hombre|mujer|persona|yo|tú
+me llamo …|¿cómo estás?|no entiendo|¿cómo se dice …?|más despacio, por favor
+coche|autobús|tren|avión|hotel
+playa|mar|sol|lluvia|calle
+libro|teléfono|mesa|cama|puerta
+grande|pequeño|bueno|malo|nuevo
+día|noche|hoy|mañana|ayer
+comer|beber|hablar|vivir|trabajar
+pollo|pescado|carne|comida|restaurante
+feliz|triste|cansado|frío|calor
+lunes|martes|miércoles|jueves|viernes
+sábado|domingo|semana|mes|año
+dinero|tienda|caro|barato|precio
+ventana|baño|habitación|ciudad|país
+música|película|foto|fiesta|viaje
+desayuno|almuerzo|cena|cuenta|ropa
+y|pero|con|sin|también
+qué|quién|dónde|cuándo|cómo
+"""
+_POS = {w[0]: i for i, w in enumerate(WORDS)}
+_first = [_POS[w.strip()] for line in EASY_FIRST.strip().splitlines() for w in line.split("|") if w.strip() in _POS]
+ORDER = list(dict.fromkeys(_first + list(range(len(WORDS)))))
+
 INTERVALS = {1: 1, 2: 3, 3: 7, 4: 14, 5: 30, 6: 60}
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS word_progress(
@@ -31,9 +66,8 @@ class Vocab:
         already = self.introduced_today(uid, day)
         if already:
             return already
-        start = self.c.execute("SELECT COALESCE(MAX(idx)+1,0) FROM word_progress WHERE student_id=?",
-                               (uid,)).fetchone()[0]
-        new = list(range(start, min(start + self.per_day, len(WORDS))))
+        seen = {r[0] for r in self.c.execute("SELECT idx FROM word_progress WHERE student_id=?", (uid,))}
+        new = [i for i in ORDER if i not in seen][:self.per_day]
         for i in new:
             self.c.execute("INSERT OR IGNORE INTO word_progress(student_id,idx,box,due,introduced) VALUES(?,?,1,?,?)",
                            (uid, i, day.isoformat(), day.isoformat()))

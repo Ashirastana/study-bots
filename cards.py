@@ -32,7 +32,7 @@ EMOJI = {
     "con": "🤝", "sin": "🚫", "nosotros": "👨‍👩‍👦", "ellos / ellas": "👥",
     "ser": "🧍", "tener": "🤲", "hacer": "🛠️", "ir": "🚶", "querer": "😍", "poder": "💪",
     "decir": "🗣️", "ver": "👀", "dar": "🎁",
-    "qué": "❓", "quién": "🕵️", "dónde": "📍", "cuándo": "⏰", "cómo": "🤔", "por qué": "❔",
+    "qué": "❓", "quién": "👤", "dónde": "📍", "cuándo": "⏰", "cómo": "🤔", "por qué": "❔",
     "cuánto": "💰", "aquí": "👇", "allí": "👉", "ahora": "⏱️", "hoy": "📅", "mañana": "🌄",
     "ayer": "⏪", "siempre": "♾️", "nunca": "🙅", "también": "➕", "mucho": "📚", "poco": "🤏",
     "más": "➕", "menos": "➖", "bueno": "👍", "malo": "👎", "grande": "🐘", "pequeño": "🐭",

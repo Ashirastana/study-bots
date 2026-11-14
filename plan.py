@@ -107,7 +107,7 @@ def today_text(day_index: int, track: str) -> str:
     d = day_index % 7 + 1
     if track == "es":
         task, check = es_week(w)
-        return (f"☀️ <b>¡Buenos días, агент!</b> 🕵️\n\n{ES_DAILY}\n\n"
+        return (f"☀️ <b>¡Buenos días!</b>\n\n{ES_DAILY}\n\n"
                 f"🎯 Цель недели: {check}\n"
                 "🎬 Есть время? Видео — кнопкой ниже.")
     task, check = ai_week(w)

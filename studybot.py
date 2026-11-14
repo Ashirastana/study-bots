@@ -28,7 +28,7 @@ import ai  # noqa: E402
 import plan  # noqa: E402
 import points  # noqa: E402
 from db import DB  # noqa: E402
-from vocab import Vocab, word_card  # noqa: E402
+from vocab import ORDER, Vocab, word_card  # noqa: E402
 from translit import translit  # noqa: E402
 import cards  # noqa: E402
 from vocab_data import WORDS  # noqa: E402
@@ -287,7 +287,7 @@ async def start(m: Message, command: CommandObject):
         await notify_admin(f"🆕 Новый студент: {ai.esc(u.full_name)} (ID <code>{u.id}</code>)")
         await m.answer(
             f"¡Hola, {ai.esc(u.first_name)}! 👋\n\n"
-            "🕵️ Ваша секретная миссия — испанский. Каждый день — 15 минут и немного смеха.\n\n"
+            "Будем учить испанский легко: каждый день 15 минут, от простого к сложному 🙂\n\n"
             "Сначала 3 вопроса — отвечайте кнопками.")
         await ask_onboarding(u.id, 0)
         return
@@ -360,9 +360,9 @@ SKIP_BY_SCORE = {0: 0, 1: 10, 2: 30, 3: 60, 4: 100, 5: 160}
 
 
 def _placement_indices():
-    n = len(WORDS)
-    idxs = sorted({min(n - 1, int(n * f)) for f in (0.03, 0.08, 0.15, 0.25, 0.40)})
-    return [i for i in idxs if i > 0]
+    n = len(ORDER)
+    pos = sorted({min(n - 1, int(n * f)) for f in (0.03, 0.08, 0.15, 0.25, 0.40)})
+    return [ORDER[p] for p in pos if p > 0]
 
 
 async def start_placement(uid: int):
@@ -394,7 +394,7 @@ async def _after_placement(uid: int, correct: int):
     if skip:
         past = (today() - timedelta(days=3650)).isoformat()  # «известно ранее», не как новое сегодня
         far = (today() + timedelta(days=3650)).isoformat()   # на повтор не всплывёт
-        for i in range(skip):
+        for i in ORDER[:skip]:
             db.c.execute("INSERT OR IGNORE INTO word_progress(student_id,idx,box,due,introduced) "
                          "VALUES(?,?,6,?,?)", (uid, i, far, past))
         db.c.commit()
@@ -458,13 +458,13 @@ async def send_words(uid: int):
     if pic:
         try:
             await bot.send_photo(uid, BufferedInputFile(pic, filename="palabras.png"),
-                                 caption="🔑 <b>Секретные пароли на сегодня</b>\n"
+                                 caption="📚 <b>Слова на сегодня</b>\n"
                                          "🔊 Послушайте и повторите вслух 3 раза.",
                                  reply_markup=kb)
             return
         except Exception as e:
             log.warning("words photo: %s", e)
-    lines = ["🔑 <b>Секретные пароли на сегодня</b>\n"]
+    lines = ["📚 <b>Слова на сегодня</b>\n"]
     lines += [word_card(i) + "\n" for i in new]
     lines.append("🔊 Послушайте и повторите вслух 3 раза.")
     await send(uid, "\n".join(lines), reply_markup=kb)
@@ -948,7 +948,7 @@ async def b_mistakes(m, s):
 
 async def b_talk(m, s):
     await m.answer("🗣 Отвечайте текстом или голосом — держите 🎤")
-    await dialog(m, s, "(Ученица нажала «Поговорить с учителем». Встреча со связным: поздоровайся одной "
+    await dialog(m, s, "(Ученица нажала «Поговорить с учителем». Поздоровайся одной "
                        "весёлой строкой и задай ОДИН очень простой вопрос строкой 🇪🇸 по теме недели или о её жизни — "
                        "такой, на который она ещё не отвечала, с подсказкой «💡 Можно ответить:». "
                        "Коротко! Блок «Исправление» и оценку сейчас НЕ давай.)")
