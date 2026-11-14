@@ -175,3 +175,52 @@ def _word(w):
 
 def translit(text: str) -> str:
     return re.sub(r"[A-Za-zÑñÁÉÍÓÚÜáéíóúü]+", lambda m: _word(m.group(0)), text)
+
+
+# ---------------- турецкий ----------------
+# Турецкий читается почти как пишется, поэтому правила простые. Ударение не ставим:
+# в турецком оно обычно на последнем слоге, но исключений много — лучше не путать.
+_TR = {"a": "а", "b": "б", "c": "дж", "ç": "ч", "d": "д", "f": "ф", "g": "г", "ğ": "",
+       "h": "х", "ı": "ы", "i": "и", "j": "ж", "k": "к", "l": "л", "m": "м", "n": "н",
+       "o": "о", "ö": "ё", "p": "п", "r": "р", "s": "с", "ş": "ш", "t": "т", "u": "у",
+       "ü": "ю", "v": "в", "z": "з", "â": "я", "î": "и", "û": "у", "w": "в", "x": "кс", "q": "к"}
+_TR_V = set("aeıioöuüâîû")
+
+
+def _tr_word(w):
+    low = w.replace("I", "ı").replace("İ", "i").lower()
+    out = []
+    for k, ch in enumerate(low):
+        prev = low[k - 1] if k else ""
+        nxt = low[k + 1] if k + 1 < len(low) else ""
+        if ch == "e":
+            out.append("э" if (not prev or prev in _TR_V or prev == "y") and prev != "y" else "е")
+            if prev == "y":
+                out[-1] = "е"            # ye → йе (й уже добавлена)
+        elif ch == "y":
+            if nxt == "a":
+                out.append("я")
+            elif nxt == "u":
+                out.append("ю")
+            else:
+                out.append("й")
+            if nxt in ("a", "u"):
+                continue
+        elif ch in ("a", "u") and prev == "y":
+            continue                     # уже вошло в «я»/«ю»
+        elif ch == "ö" and prev and prev not in _TR_V:
+            out.append("ё")
+        elif ch == "ü" and prev and prev not in _TR_V:
+            out.append("ю")
+        elif ch == "ü":
+            out.append("ю")
+        elif ch == "l" and nxt in ("e", "i", "ö", "ü"):
+            out.append("л")
+        else:
+            out.append(_TR.get(ch, ch))
+    res = "".join(out)
+    return res[:1].upper() + res[1:] if w[:1].isupper() else res
+
+
+def translit_tr(text: str) -> str:
+    return re.sub(r"[A-Za-zÇçĞğİıÖöŞşÜüÂâÎîÛû]+", lambda m: _tr_word(m.group(0)), text)

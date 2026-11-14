@@ -32,6 +32,8 @@ from db import DB  # noqa: E402
 from tr_vocab import Vocab, word_card as _word_card, distractors  # noqa: E402
 from tr_vocab_data import WORDS  # noqa: E402
 import tr_tts as tts  # noqa: E402
+import cards  # noqa: E402
+from translit import translit_tr  # noqa: E402
 
 TRACK = os.getenv("TRACK", "tr").strip().lower()
 assert TRACK == "tr", "turkbot.py — только для TRACK=tr"
@@ -53,6 +55,7 @@ log = logging.getLogger(TRACK)
 bot = Bot(BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher()
 db = DB(os.getenv("DB_PATH", "bot.db"))
+EMOJI_DIR = os.path.join(os.path.dirname(os.path.abspath(os.getenv("DB_PATH", "bot.db"))), "emoji")
 db.c.execute("CREATE TABLE IF NOT EXISTS sent_log(key TEXT, day TEXT, PRIMARY KEY(key, day))")
 db.c.commit()
 vocab = Vocab(db.c, per_day=int(os.getenv("WORDS_PER_DAY", "30"))) if ES else None
@@ -151,6 +154,7 @@ BTN_LISTEN, BTN_QUIZ = "🔊 Послушать слова", "🧠 Провер�
 BTN_TALK, BTN_PROGRESS = "🗣 Поговорить с учителем", "📈 Мои успехи"
 BTN_HELP = "❓ Как пользоваться"
 BTN_MISTAKES = "🔁 Мои ошибки"
+BTN_LADDER = "🪜 Составить предложение"
 BTN_LESSON, BTN_GAMES, BTN_VIDEO = "📖 Урок дня", "🎮 Игры", "🎬 Видео и подкасты"
 
 
@@ -163,8 +167,8 @@ def menu_kb():
         [K(text=BTN_WORDS), K(text=BTN_LISTEN)],
         [K(text=BTN_QUIZ), K(text=BTN_GAMES)],
         [K(text=BTN_TALK), K(text=BTN_VIDEO)],
-        [K(text=BTN_PROGRESS), K(text=BTN_MISTAKES)],
-        [K(text=BTN_HELP)],
+        [K(text=BTN_LADDER), K(text=BTN_MISTAKES)],
+        [K(text=BTN_PROGRESS), K(text=BTN_HELP)],
     ], resize_keyboard=True, is_persistent=True, input_field_placeholder="Пишите по-турецки или запишите голос 🎤")
 
 
@@ -255,9 +259,9 @@ async def notify_admin(text: str):
 
 HELP_ES = ("❓ <b>Как пользоваться ботом</b>\n\n"
            "Всё делается кнопками внизу экрана 👇\n\n"
-           "📅 <b>Задание на сегодня</b> — план дня на 1,5–2 часа.\n"
+           "📅 <b>Задание на сегодня</b> — план дня, маленькими шагами.\n"
            "📖 <b>Урок дня</b> — правило грамматики с примерами и заданием.\n"
-           "📚 <b>Слова дня</b> — 30 новых слов (3 порции по 10). Новые приходят каждое утро сами.\n"
+           "📚 <b>Слова дня</b> — 10 новых слов с картинками. Новые приходят каждое утро сами.\n"
            "🔊 <b>Послушать слова</b> — диктор прочитает слова, повторяйте вслух.\n"
            "🧠 <b>Проверить слова</b> — повторение: бот помнит, что Вы знаете, и возвращает забытое.\n"
            "🎮 <b>Игры</b> — перевод в обе стороны, на слух, правописание, окончания, глаголы.\n"
@@ -311,8 +315,8 @@ async def start(m: Message, command: CommandObject):
         await notify_admin(f"🆕 Новый студент: {ai.esc(u.full_name)} (ID <code>{u.id}</code>)")
         await m.answer(
             f"Merhaba, {ai.esc(u.first_name)}! 👋\n\n"
-            "Я — Ваш помощник по турецкому. Это <b>интенсив с нуля</b>: каждый день урок грамматики, "
-            "30 новых слов, игры, видео и разговор с ИИ-учителем — около 1,5–2 часов.\n\n"
+            "Я — Ваш помощник по турецкому. Учим с нуля маленькими шагами: каждый день "
+            "10 новых слов с картинками, короткий урок, игры и разговор с учителем.\n\n"
             "Ошибаться — нормально, для этого я и нужен 🙂\n\n"
             "Давайте познакомимся — <b>4 коротких вопроса</b>, отвечайте кнопками.")
         await ask_onboarding(u.id, 0)
@@ -499,7 +503,29 @@ async def send_words(uid: int):
         if p == len(parts) - 1:
             kb.append([InlineKeyboardButton(text="🧠 Проверить себя", callback_data="povtor"),
                        InlineKeyboardButton(text="🎮 Игры", callback_data="gm")])
-        await send(uid, "\n".join(lines), reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
+            kb.append([InlineKeyboardButton(text="🪜 Составить предложение", callback_data="ladder")])
+        markup = InlineKeyboardMarkup(inline_keyboard=kb)
+        # Карточки-картинки: картинка, слово, транскрипция русскими буквами, перевод.
+        await bot.send_chat_action(uid, "upload_photo")
+        kk_on = show_kk(uid)
+        pic = await cards.cards_image([(WORDS[i][0], translit_tr(WORDS[i][0]),
+                                        short_ru(WORDS[i][1]) + (f" · каз. {WORDS[i][2]}" if kk_on and WORDS[i][2] else ""),
+                                        cards.ru_emoji(WORDS[i][1])) for i in chunk], EMOJI_DIR)
+        if pic:
+            cap = head + "🔊 Послушайте и повторите вслух 3 раза."
+            try:
+                await bot.send_photo(uid, BufferedInputFile(pic, filename=f"kelimeler_{p + 1}.png"),
+                                     caption=cap[:1000], reply_markup=markup)
+                continue
+            except Exception as e:
+                log.warning("words photo: %s", e)
+        await send(uid, "\n".join(lines), reply_markup=markup)
+
+
+def short_ru(ru: str) -> str:
+    """Короткий перевод для карточки: до «;», без длинных пояснений в скобках."""
+    t = ru.split(";")[0].strip()
+    return re.sub(r"\s*\([^)]*\)", "", t).strip() if len(t) > 28 else t
 
 
 async def send_listen(uid: int, part: int | None = None):
@@ -519,6 +545,59 @@ async def send_listen(uid: int, part: int | None = None):
                              duration=tts.duration(audio, fname),
                              title=f"Слова дня — порция {n}", performer="Учитель турецкого",
                              caption="🔊 Каждое слово — 2 раза. После паузы повторите вслух.")
+
+
+
+
+# ---------------- тест с картинками ----------------
+# По очереди: «что на картинке?» (выбрать слово) и «где это слово?» (выбрать 1 из 4 картинок).
+# Только для слов с картинкой, которая есть у одного слова (иначе не угадать) — остальные текстом.
+from collections import Counter as _Counter  # noqa: E402
+
+_EMO = {i: cards.ru_emoji(WORDS[i][1]) for i in range(len(WORDS))}
+_EMO_N = _Counter(e for e in _EMO.values() if e)
+
+
+def pic_ok(i) -> bool:
+    return bool(_EMO[i]) and _EMO_N[_EMO[i]] == 1
+
+
+async def picture_question(uid: int, idx: int, st: dict, left: int) -> bool:
+    """Задаёт вопрос с картинкой. False — если для этого слова нельзя, тогда спросим текстом."""
+    if not pic_ok(idx):
+        return False
+    st["pic"] = st.get("pic", 0) + 1
+    word = WORDS[idx][0]
+    try:
+        if st["pic"] % 2:   # картинка → слово
+            others = [i for i in range(len(WORDS)) if i != idx and _EMO[i] != _EMO[idx]
+                      and WORDS[i][1] != WORDS[idx][1]]
+            opts = random.sample(others, 3) + [idx]
+            random.shuffle(opts)
+            img = await cards.picture_image(_EMO[idx], EMOJI_DIR)
+            if not img:
+                return False
+            kb = [[InlineKeyboardButton(text=WORDS[o][0][:60], callback_data=f"q:{idx}:{o}")] for o in opts]
+            cap = f"🖼 Что на картинке? Выберите слово 👇  <i>(осталось {left})</i>"
+        else:               # слово → картинка
+            pool = [i for i in range(len(WORDS)) if i != idx and pic_ok(i)]
+            if len(pool) < 3:
+                return False
+            opts = random.sample(pool, 3) + [idx]
+            random.shuffle(opts)
+            img = await cards.grid_image([_EMO[o] for o in opts], EMOJI_DIR)
+            if not img:
+                return False
+            kb = [[InlineKeyboardButton(text=f"{n}", callback_data=f"q:{idx}:{o}")
+                   for n, o in enumerate(opts, 1)]]
+            cap = (f"🎯 Где <b>{ai.esc(word)}</b>?\n🗣 {translit_tr(word)}\n"
+                   f"Нажмите номер картинки 👇  <i>(осталось {left})</i>")
+        await bot.send_photo(uid, BufferedInputFile(img, filename="test.png"), caption=cap,
+                             reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
+        return True
+    except Exception as e:
+        log.warning("picture question: %s", e)
+        return False
 
 
 QUIZ: dict = {}  # uid -> {"queue": [idx...], "right": n, "total": n}
@@ -542,9 +621,11 @@ async def quiz_next(uid: int):
                                 f"⭐ +{gained} очков · всего {total_xp}")
         return
     idx = st["queue"][0]
+    left = len(st["queue"])
+    if await picture_question(uid, idx, st, left):
+        return
     es, opts = vocab.question(idx)
     kb = [[InlineKeyboardButton(text=WORDS[o][1][:60], callback_data=f"q:{idx}:{o}")] for o in opts]
-    left = len(st["queue"])
     await send(uid, f"🧠 Что значит <b>{es}</b>?  <i>(осталось {left})</i>", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
 
 
@@ -1002,6 +1083,16 @@ async def dialog(m: Message, s, user_text: str, prefix: str = "", no_score: bool
         await _finish_dialog(m, s, user_text, raw, prefix, no_score, extra_kb)
 
 
+def tr_lines(html: str) -> str:
+    """Под каждой турецкой строкой «🇹🇷 …» — транскрипция русскими буквами (делает код, не ИИ)."""
+    def one(mt):
+        line = mt.group(0)
+        body = re.split(r" = | — ", line.replace("🇹🇷", "").strip(), maxsplit=1)[0]
+        body = re.sub(r"\s*\([^)]*\)", "", body).strip()
+        return line + (f"\n🗣 {translit_tr(body)}" if body else "")
+    return re.sub(r"(?m)^[ \t]*🇹🇷[^\n]*", one, html)
+
+
 async def _finish_dialog(m: Message, s, user_text: str, raw: str, prefix: str, no_score: bool = False,
                          extra_kb=None):
     text, score = ai.split_score(raw)
@@ -1021,7 +1112,7 @@ async def _finish_dialog(m: Message, s, user_text: str, raw: str, prefix: str, n
             k = text.find("Исправление")
             fb = " ".join(text[k:].replace("**", "").split())[:200] if k >= 0 else ""
             db.add_voice(s["id"], today(), user_text.replace("[ГОЛОС] ", ""), score, fb)
-    out = prefix + ai.clean_md(text)
+    out = prefix + tr_lines(ai.clean_md(text))
     kb = None
     if ES:
         if score is not None:
@@ -1029,7 +1120,7 @@ async def _finish_dialog(m: Message, s, user_text: str, raw: str, prefix: str, n
         es_line = next((l.replace("🇹🇷", "").strip() for l in text.splitlines() if l.strip().startswith("🇹🇷")), "")
         es_line = re.sub(r"\s*\([^)]*\)", "", es_line).strip()  # убрать русский перевод в скобках
         if es_line and await asyncio.to_thread(tts.spanish_voice):
-            LAST_ES[m.from_user.id] = es_line
+            LAST_ES[m.chat.id] = es_line
             kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(
                 text="🔊 Послушать, как это звучит", callback_data="say_last")]])
         if extra_kb:
@@ -1212,9 +1303,24 @@ async def b_mistakes(m, s):
 
 async def b_talk(m, s):
     await m.answer("🗣 Отвечайте учителю текстом или голосом — <b>нажмите и держите 🎤</b> справа внизу.")
-    await dialog(m, s, "(Ученик нажал «Поговорить с учителем». Поздоровайся и дай ОДНО простое задание по уроку "
+    await dialog(m, s, "(Ученица нажала «Поговорить с учителем». Поздоровайся и дай ОДНО простое задание по уроку "
                        "дня (см. тему) или задай вопрос по-турецки о его жизни — такой, на который он ещё не "
                        "отвечал. Блок «Исправление» и оценку сейчас НЕ давай.)")
+
+
+LADDER_PROMPT = "(Ученица нажала «Составить предложение». Лесенка из уже выученных слов: возьми 2–3 слова из ""тех, что она уже изучала, и дай ОДНО короткое предложение из 2 слов строкой 🇹🇷 с переводом. ""Попроси повторить вслух и написать своё. На следующих шагах предложение растёт на ОДНО слово. ""Только знакомые слова, максимум одно новое. Коротко. Исправление и оценку сейчас НЕ давай.)"
+
+
+async def b_ladder(m, s):
+    await dialog(m, s, LADDER_PROMPT)
+
+
+@dp.callback_query(F.data == "ladder")
+async def cb_ladder(c: CallbackQuery):
+    await c.answer()
+    s = student_or_none(c.from_user.id)
+    if s:
+        await dialog(c.message, s, LADDER_PROMPT)
 
 
 async def b_progress(m, s):
@@ -1241,7 +1347,7 @@ async def b_video(m, s):
 
 BUTTONS = {BTN_TODAY: b_today, BTN_WORDS: b_words, BTN_LISTEN: b_listen, BTN_QUIZ: b_quiz,
            BTN_TALK: b_talk, BTN_PROGRESS: b_progress, BTN_HELP: b_help, BTN_MISTAKES: b_mistakes,
-           BTN_LESSON: b_lesson, BTN_GAMES: b_games, BTN_VIDEO: b_video}
+           BTN_LESSON: b_lesson, BTN_GAMES: b_games, BTN_VIDEO: b_video, BTN_LADDER: b_ladder}
 
 
 # ---------------- преподаватель ----------------

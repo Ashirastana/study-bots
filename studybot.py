@@ -4,6 +4,7 @@ TRACK=ai  → бот по ИИ
 Каждый бот запускается из своей папки со своим .env и своей базой.
 """
 import asyncio
+import random
 import logging
 import os
 import re
@@ -142,6 +143,7 @@ BTN_TODAY, BTN_WORDS = "📅 Задание на сегодня", "📚 Слов
 BTN_LISTEN, BTN_QUIZ = "🔊 Послушать слова", "🧠 Проверить слова"
 BTN_TALK, BTN_PROGRESS = "🗣 Поговорить с учителем", "📈 Мои успехи"
 BTN_MISTAKES = "🔁 Мои ошибки"
+BTN_LADDER = "🪜 Составить предложение"
 BTN_HELP = "❓ Как пользоваться"
 
 
@@ -152,8 +154,9 @@ def menu_kb():
     return ReplyKeyboardMarkup(keyboard=[
         [K(text=BTN_TODAY), K(text=BTN_WORDS)],
         [K(text=BTN_LISTEN), K(text=BTN_QUIZ)],
-        [K(text=BTN_TALK), K(text=BTN_PROGRESS)],
-        [K(text=BTN_MISTAKES), K(text=BTN_HELP)],
+        [K(text=BTN_TALK), K(text=BTN_LADDER)],
+        [K(text=BTN_PROGRESS), K(text=BTN_MISTAKES)],
+        [K(text=BTN_HELP)],
     ], resize_keyboard=True, is_persistent=True, input_field_placeholder="Напишите по-испански или запишите голос 🎤")
 
 
@@ -451,7 +454,8 @@ async def send_words(uid: int):
         return
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🔊 Послушать слова", callback_data="listen")],
-        [InlineKeyboardButton(text="🧠 Проверить себя", callback_data="povtor")]])
+        [InlineKeyboardButton(text="🧠 Проверить себя", callback_data="povtor")],
+        [InlineKeyboardButton(text="🪜 Составить предложение", callback_data="ladder")]])
     # Сначала — карточки-картинки (слово + картинка + транскрипция), как в детских карточках.
     await bot.send_chat_action(uid, "upload_photo")
     pic = await cards.words_image([WORDS[i] for i in new], EMOJI_DIR)
@@ -487,6 +491,59 @@ async def send_listen(uid: int):
                          caption="🔊 Каждое слово — 2 раза. После паузы повторите вслух.")
 
 
+
+
+# ---------------- тест с картинками ----------------
+# По очереди: «что на картинке?» (выбрать слово) и «где это слово?» (выбрать 1 из 4 картинок).
+# Только для слов с картинкой, которая есть у одного слова (иначе не угадать) — остальные текстом.
+from collections import Counter as _Counter  # noqa: E402
+
+_EMO = {i: cards.EMOJI.get(WORDS[i][0], "") for i in range(len(WORDS))}
+_EMO_N = _Counter(e for e in _EMO.values() if e)
+
+
+def pic_ok(i) -> bool:
+    return bool(_EMO[i]) and _EMO_N[_EMO[i]] == 1
+
+
+async def picture_question(uid: int, idx: int, st: dict, left: int) -> bool:
+    """Задаёт вопрос с картинкой. False — если для этого слова нельзя, тогда спросим текстом."""
+    if not pic_ok(idx):
+        return False
+    st["pic"] = st.get("pic", 0) + 1
+    word = WORDS[idx][0]
+    try:
+        if st["pic"] % 2:   # картинка → слово
+            others = [i for i in range(len(WORDS)) if i != idx and _EMO[i] != _EMO[idx]
+                      and WORDS[i][1] != WORDS[idx][1]]
+            opts = random.sample(others, 3) + [idx]
+            random.shuffle(opts)
+            img = await cards.picture_image(_EMO[idx], EMOJI_DIR)
+            if not img:
+                return False
+            kb = [[InlineKeyboardButton(text=WORDS[o][0][:60], callback_data=f"q:{idx}:{o}")] for o in opts]
+            cap = f"🖼 Что на картинке? Выберите слово 👇  <i>(осталось {left})</i>"
+        else:               # слово → картинка
+            pool = [i for i in range(len(WORDS)) if i != idx and pic_ok(i)]
+            if len(pool) < 3:
+                return False
+            opts = random.sample(pool, 3) + [idx]
+            random.shuffle(opts)
+            img = await cards.grid_image([_EMO[o] for o in opts], EMOJI_DIR)
+            if not img:
+                return False
+            kb = [[InlineKeyboardButton(text=f"{n}", callback_data=f"q:{idx}:{o}")
+                   for n, o in enumerate(opts, 1)]]
+            cap = (f"🎯 Где <b>{ai.esc(word)}</b>?\n🗣 {translit(word)}\n"
+                   f"Нажмите номер картинки 👇  <i>(осталось {left})</i>")
+        await bot.send_photo(uid, BufferedInputFile(img, filename="test.png"), caption=cap,
+                             reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
+        return True
+    except Exception as e:
+        log.warning("picture question: %s", e)
+        return False
+
+
 QUIZ: dict = {}  # uid -> {"queue": [idx...], "right": n, "total": n}
 LAST_ES: dict = {}  # uid -> последняя испанская реплика учителя (для озвучки)
 
@@ -508,9 +565,11 @@ async def quiz_next(uid: int):
                                 f"⭐ +{gained} очков · всего {total_xp}")
         return
     idx = st["queue"][0]
+    left = len(st["queue"])
+    if await picture_question(uid, idx, st, left):
+        return
     es, opts = vocab.question(idx)
     kb = [[InlineKeyboardButton(text=WORDS[o][2][:60], callback_data=f"q:{idx}:{o}")] for o in opts]
-    left = len(st["queue"])
     await send(uid, f"🧠 Что значит <b>{es}</b>?\n🗣 {translit(es)}  <i>(осталось {left})</i>",
                reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
 
@@ -767,7 +826,7 @@ async def _finish_dialog(m: Message, s, user_text: str, raw: str, prefix: str, n
             out += f"\n\n📊 <b>Оценка: {score}/10</b>"
         es_line = ai.es_main_line(text)  # первая испанская фраза без перевода
         if es_line and await asyncio.to_thread(tts.spanish_voice):
-            LAST_ES[m.from_user.id] = es_line
+            LAST_ES[m.chat.id] = es_line
             kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(
                 text="🔊 Послушать, как это звучит", callback_data="say_last")]])
         if extra_kb:
@@ -954,6 +1013,21 @@ async def b_talk(m, s):
                        "Коротко! Блок «Исправление» и оценку сейчас НЕ давай.)")
 
 
+LADDER_PROMPT = "(Ученица нажала «Составить предложение». Лесенка из уже выученных слов: возьми 2–3 слова из ""тех, что она уже изучала, и дай ОДНО короткое предложение из 2 слов строкой 🇪🇸 с переводом. ""Попроси повторить вслух и написать своё. На следующих шагах предложение растёт на ОДНО слово. ""Только знакомые слова, максимум одно новое. Коротко. Исправление и оценку сейчас НЕ давай.)"
+
+
+async def b_ladder(m, s):
+    await dialog(m, s, LADDER_PROMPT)
+
+
+@dp.callback_query(F.data == "ladder")
+async def cb_ladder(c: CallbackQuery):
+    await c.answer()
+    s = student_or_none(c.from_user.id)
+    if s:
+        await dialog(c.message, s, LADDER_PROMPT)
+
+
 async def b_progress(m, s):
     await send(s["id"], summary_text(s, for_admin=False))
 
@@ -963,7 +1037,8 @@ async def b_help(m, s):
 
 
 BUTTONS = {BTN_TODAY: b_today, BTN_WORDS: b_words, BTN_LISTEN: b_listen, BTN_QUIZ: b_quiz,
-           BTN_TALK: b_talk, BTN_PROGRESS: b_progress, BTN_MISTAKES: b_mistakes, BTN_HELP: b_help}
+           BTN_TALK: b_talk, BTN_PROGRESS: b_progress, BTN_MISTAKES: b_mistakes, BTN_HELP: b_help,
+           BTN_LADDER: b_ladder}
 
 
 # ---------------- преподаватель ----------------
